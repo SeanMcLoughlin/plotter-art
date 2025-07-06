@@ -16,7 +16,7 @@ class RibbonSurfaceSketch(vsketch.SketchClass):
     scale_factor = vsketch.Param(8.0, min_value=2.0, max_value=15.0)
 
     def draw(self, vsk: vsketch.Vsketch) -> None:
-        vsk.size("a4", landscape=False)
+        vsk.size("letter", landscape=False)
         vsk.scale("cm")
 
         # Generate and draw the selected surface(s)
