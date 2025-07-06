@@ -2,6 +2,8 @@ import vsketch
 import numpy as np
 import matplotlib.tri as mtri
 import math
+from noise import snoise2
+import kumiko_tiles
 
 class KumikoGridSketch(vsketch.SketchClass):
     # Parameters
@@ -10,6 +12,21 @@ class KumikoGridSketch(vsketch.SketchClass):
     spacing = vsketch.Param(0.25, min_value=0.01, max_value=2.0)
     vertex_connection_ratio = vsketch.Param(1.0, min_value=0.0, max_value=1.0)
     rotate_90 = vsketch.Param(False)
+
+    # Layer parameters
+    num_layers = vsketch.Param(3, min_value=0, max_value=10)
+    layer_1_color = vsketch.Param(2, min_value=1, max_value=8)
+    layer_2_color = vsketch.Param(3, min_value=1, max_value=8)
+    layer_3_color = vsketch.Param(4, min_value=1, max_value=8)
+    layer_4_color = vsketch.Param(5, min_value=1, max_value=8)
+    layer_5_color = vsketch.Param(6, min_value=1, max_value=8)
+    layer_1_tile_type = vsketch.Param("asanoha")
+    layer_2_tile_type = vsketch.Param("seigaiha")
+    layer_3_tile_type = vsketch.Param("kikko")
+    layer_4_tile_type = vsketch.Param("shippo")
+    layer_5_tile_type = vsketch.Param("yabane")
+    noise_scale = vsketch.Param(0.1, min_value=0.01, max_value=1.0)
+    noise_threshold = vsketch.Param(0.3, min_value=0.0, max_value=1.0)
 
     def draw(self, vsk: vsketch.Vsketch) -> None:
         vsk.size("letter", landscape=False)
@@ -34,6 +51,10 @@ class KumikoGridSketch(vsketch.SketchClass):
 
         # Connect boundary vertices to frame edges
         self.draw_boundary_connections(vsk, x_points, y_points, self.rotate_90)
+
+        # Draw kumiko tile layers
+        if self.num_layers > 0:
+            self.draw_kumiko_layers(vsk, x_points, y_points)
 
     def generate_triangular_lattice(self):
         """Generate uniform points in a triangular lattice (hexagonal close-packed)"""
@@ -256,7 +277,103 @@ class KumikoGridSketch(vsketch.SketchClass):
 
         return boundary_indices
 
+    def draw_kumiko_layers(self, vsk: vsketch.Vsketch, x_points, y_points):
+        """Draw kumiko tile layers on top of the triangular grid"""
+        # Get triangular cells
+        triangles = self.get_triangular_cells(x_points, y_points)
+
+        # Layer colors and tile types
+        layer_colors = [
+            self.layer_1_color, self.layer_2_color, self.layer_3_color,
+            self.layer_4_color, self.layer_5_color
+        ]
+        layer_tile_types = [
+            self.layer_1_tile_type, self.layer_2_tile_type, self.layer_3_tile_type,
+            self.layer_4_tile_type, self.layer_5_tile_type
+        ]
+
+        # Create a dictionary to track which triangle gets which layer
+        triangle_layers = {}
+
+        # For each layer, determine which triangles get tiles
+        for layer in range(self.num_layers):
+            color = layer_colors[layer % len(layer_colors)]
+            tile_type = layer_tile_types[layer % len(layer_tile_types)]
+
+            for i, triangle in enumerate(triangles):
+                # Use noise to determine placement
+                center_x = np.mean([x_points[idx] for idx in triangle])
+                center_y = np.mean([y_points[idx] for idx in triangle])
+
+                # Different noise offset for each layer
+                noise_value = snoise2(center_x * self.noise_scale + layer * 100,
+                                    center_y * self.noise_scale + layer * 100)
+
+                # Normalize noise to 0-1 range
+                noise_normalized = (noise_value + 1) / 2
+
+                if noise_normalized > self.noise_threshold:
+                    # Higher layers override lower layers
+                    triangle_layers[i] = (layer, color, tile_type)
+
+        # Draw the tiles
+        for triangle_idx, (layer, color, tile_type) in triangle_layers.items():
+            triangle = triangles[triangle_idx]
+            triangle_coords = [(x_points[idx], y_points[idx]) for idx in triangle]
+
+            # Set stroke color for this layer
+            vsk.stroke(color)
+
+            # Draw the kumiko tile using plugin system
+            try:
+                kumiko_tiles.draw_tile(vsk, triangle_coords, tile_type)
+            except KeyError:
+                # If tile type not found, use simple_lines as fallback
+                kumiko_tiles.draw_tile(vsk, triangle_coords, "simple_lines")
+
+        # Reset stroke to black
+        vsk.stroke(1)
+
+    def get_triangular_cells(self, x_points, y_points):
+        """Get the triangular cells formed by the grid points"""
+        # Use Delaunay triangulation to find triangles
+        points = np.column_stack((x_points, y_points))
+        tri = mtri.Triangulation(x_points, y_points)
+
+        # Filter out triangles that are too large (not part of regular grid)
+        triangles = []
+        max_edge_length = self.spacing * 1.5  # Allow some tolerance
+
+        for triangle in tri.triangles:
+            # Check if triangle edges are reasonable length
+            p1, p2, p3 = triangle
+            coords = [(x_points[p1], y_points[p1]),
+                     (x_points[p2], y_points[p2]),
+                     (x_points[p3], y_points[p3])]
+
+            # Calculate edge lengths
+            edge_lengths = [
+                math.sqrt((coords[1][0] - coords[0][0])**2 + (coords[1][1] - coords[0][1])**2),
+                math.sqrt((coords[2][0] - coords[1][0])**2 + (coords[2][1] - coords[1][1])**2),
+                math.sqrt((coords[0][0] - coords[2][0])**2 + (coords[0][1] - coords[2][1])**2)
+            ]
+
+            # Only keep triangles with reasonable edge lengths
+            if all(length <= max_edge_length for length in edge_lengths):
+                triangles.append(triangle)
+
+        return triangles
+
+    def get_available_tiles(self):
+        """Get list of available tile types from the plugin system"""
+        return kumiko_tiles.get_available_tiles()
+
+    def get_tile_info(self):
+        """Get information about available tiles"""
+        return kumiko_tiles.registry.get_tile_info()
+
     def finalize(self, vsk: vsketch.Vsketch) -> None:
+
         vsk.vpype("linemerge linesimplify reloop linesort")
 
 if __name__ == "__main__":
