@@ -2,6 +2,10 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button, CheckButtons, RadioButtons
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from mpl_toolkits.mplot3d.axes3d import Axes3D as Axes3DType
 
 # Only requires: pip install matplotlib numpy
 
@@ -106,7 +110,7 @@ class InteractiveTerrainViewer:
         slider_width = 0.3
 
         # Scale slider
-        ax_scale = plt.axes([slider_left, 0.15, slider_width, slider_height])
+        ax_scale = plt.axes((slider_left, 0.15, slider_width, slider_height))
         self.slider_scale = Slider(
             ax_scale,
             "Scale",
@@ -119,7 +123,7 @@ class InteractiveTerrainViewer:
 
         # Octaves slider
         ax_octaves = plt.axes(
-            [slider_left, 0.15 - slider_spacing, slider_width, slider_height]
+            (slider_left, 0.15 - slider_spacing, slider_width, slider_height)
         )
         self.slider_octaves = Slider(
             ax_octaves,
@@ -134,7 +138,7 @@ class InteractiveTerrainViewer:
 
         # Persistence slider
         ax_persistence = plt.axes(
-            [slider_left, 0.15 - 2 * slider_spacing, slider_width, slider_height]
+            (slider_left, 0.15 - 2 * slider_spacing, slider_width, slider_height)
         )
         self.slider_persistence = Slider(
             ax_persistence,
@@ -148,7 +152,7 @@ class InteractiveTerrainViewer:
 
         # Height scale slider
         ax_height = plt.axes(
-            [slider_left, 0.15 - 3 * slider_spacing, slider_width, slider_height]
+            (slider_left, 0.15 - 3 * slider_spacing, slider_width, slider_height)
         )
         self.slider_height = Slider(
             ax_height,
@@ -162,7 +166,7 @@ class InteractiveTerrainViewer:
 
         # Resolution slider
         ax_resolution = plt.axes(
-            [slider_left, 0.15 - 4 * slider_spacing, slider_width, slider_height]
+            (slider_left, 0.15 - 4 * slider_spacing, slider_width, slider_height)
         )
         self.slider_resolution = Slider(
             ax_resolution,
@@ -181,34 +185,34 @@ class InteractiveTerrainViewer:
         button_left = 0.55
 
         # Generate new terrain button
-        ax_generate = plt.axes([button_left, 0.15, button_width, button_height])
+        ax_generate = plt.axes((button_left, 0.15, button_width, button_height))
         self.btn_generate = Button(ax_generate, "New Terrain")
         self.btn_generate.on_clicked(self.generate_new_terrain)
 
         # Reset view button
         ax_reset = plt.axes(
-            [button_left, 0.15 - slider_spacing, button_width, button_height]
+            (button_left, 0.15 - slider_spacing, button_width, button_height)
         )
         self.btn_reset = Button(ax_reset, "Reset View")
         self.btn_reset.on_clicked(self.reset_view)
 
         # Isometric view button
         ax_iso = plt.axes(
-            [button_left, 0.15 - 2 * slider_spacing, button_width, button_height]
+            (button_left, 0.15 - 2 * slider_spacing, button_width, button_height)
         )
         self.btn_iso = Button(ax_iso, "Isometric")
         self.btn_iso.on_clicked(self.isometric_view)
 
         # Export button
         ax_export = plt.axes(
-            [button_left, 0.15 - 3 * slider_spacing, button_width, button_height]
+            (button_left, 0.15 - 3 * slider_spacing, button_width, button_height)
         )
         self.btn_export = Button(ax_export, "Export")
         self.btn_export.on_clicked(self.export_parameters)
 
         # Wireframe checkbox
         ax_wireframe = plt.axes(
-            [button_left + button_width + 0.02, 0.15, 0.08, button_height]
+            (button_left + button_width + 0.02, 0.15, 0.08, button_height)
         )
         self.check_wireframe = CheckButtons(
             ax_wireframe, ["Wireframe"], [self.wireframe]
@@ -217,12 +221,12 @@ class InteractiveTerrainViewer:
 
         # Show axes checkbox
         ax_show_axes = plt.axes(
-            [
+            (
                 button_left + button_width + 0.02,
                 0.15 - slider_spacing,
                 0.08,
                 button_height,
-            ]
+            )
         )
         self.check_show_axes = CheckButtons(
             ax_show_axes, ["Show Axes"], [self.show_axes]
@@ -230,7 +234,7 @@ class InteractiveTerrainViewer:
         self.check_show_axes.on_clicked(self.toggle_axes)
 
         # Colormap radio buttons (moved down slightly)
-        ax_colormap = plt.axes([button_left + button_width + 0.12, 0.08, 0.1, 0.08])
+        ax_colormap = plt.axes((button_left + button_width + 0.12, 0.08, 0.1, 0.08))
         self.radio_colormap = RadioButtons(
             ax_colormap, ("terrain", "viridis", "plasma", "coolwarm")
         )
@@ -269,11 +273,11 @@ class InteractiveTerrainViewer:
         self.ax_3d.clear()
 
         if self.wireframe:
-            self.ax_3d.plot_wireframe(
+            self.ax_3d.plot_wireframe(  # type: ignore
                 self.X, self.Y, self.Z, color="black", linewidth=0.5, alpha=0.8
             )
         else:
-            surf = self.ax_3d.plot_surface(
+            surf = self.ax_3d.plot_surface(  # type: ignore
                 self.X,
                 self.Y,
                 self.Z,
@@ -288,27 +292,27 @@ class InteractiveTerrainViewer:
         if self.show_axes:
             self.ax_3d.set_xlabel("X")
             self.ax_3d.set_ylabel("Y")
-            self.ax_3d.set_zlabel("Height")
+            self.ax_3d.set_zlabel("Height")  # type: ignore
         else:
             # Hide axis labels and ticks
             self.ax_3d.set_xlabel("")
             self.ax_3d.set_ylabel("")
-            self.ax_3d.set_zlabel("")
+            self.ax_3d.set_zlabel("")  # type: ignore
             self.ax_3d.set_xticks([])
             self.ax_3d.set_yticks([])
-            self.ax_3d.set_zticks([])
+            self.ax_3d.set_zticks([])  # type: ignore
             # Hide the axis lines/panes
             self.ax_3d.grid(False)
-            self.ax_3d.xaxis.pane.fill = False
-            self.ax_3d.yaxis.pane.fill = False
-            self.ax_3d.zaxis.pane.fill = False
-            self.ax_3d.xaxis.pane.set_edgecolor("none")
-            self.ax_3d.yaxis.pane.set_edgecolor("none")
-            self.ax_3d.zaxis.pane.set_edgecolor("none")
+            self.ax_3d.xaxis.pane.fill = False  # type: ignore
+            self.ax_3d.yaxis.pane.fill = False  # type: ignore
+            self.ax_3d.zaxis.pane.fill = False  # type: ignore
+            self.ax_3d.xaxis.pane.set_edgecolor("none")  # type: ignore
+            self.ax_3d.yaxis.pane.set_edgecolor("none")  # type: ignore
+            self.ax_3d.zaxis.pane.set_edgecolor("none")  # type: ignore
             # Hide the axis spines (the outer frame)
-            self.ax_3d.xaxis.line.set_color("none")
-            self.ax_3d.yaxis.line.set_color("none")
-            self.ax_3d.zaxis.line.set_color("none")
+            self.ax_3d.xaxis.line.set_color("none")  # type: ignore
+            self.ax_3d.yaxis.line.set_color("none")  # type: ignore
+            self.ax_3d.zaxis.line.set_color("none")  # type: ignore
             # Make axes completely invisible
             self.ax_3d.set_axis_off()
 
@@ -330,13 +334,14 @@ class InteractiveTerrainViewer:
         mid_z = (self.Z.max() + self.Z.min()) * 0.5
         self.ax_3d.set_xlim(mid_x - max_range, mid_x + max_range)
         self.ax_3d.set_ylim(mid_y - max_range, mid_y + max_range)
-        self.ax_3d.set_zlim(mid_z - max_range, mid_z + max_range)
+        self.ax_3d.set_zlim(mid_z - max_range, mid_z + max_range)  # type: ignore
 
     def update_2d_plot(self):
         # Clear only the contour lines, keep the image
         if hasattr(self, "_contours"):
             try:
-                for coll in self._contours.collections:
+                collections = getattr(self._contours, 'collections', [])
+                for coll in collections:
                     coll.remove()
             except AttributeError:
                 # Handle different matplotlib versions
@@ -361,7 +366,7 @@ class InteractiveTerrainViewer:
                 self.Z,
                 cmap=self.colormap,
                 origin="lower",
-                extent=[self.X.min(), self.X.max(), self.Y.min(), self.Y.max()],
+                extent=(self.X.min(), self.X.max(), self.Y.min(), self.Y.max()),
             )
 
             self.ax_2d.set_xlabel("X")
@@ -377,7 +382,7 @@ class InteractiveTerrainViewer:
         else:
             # Update existing image data
             self.im.set_array(self.Z)
-            self.im.set_extent([self.X.min(), self.X.max(), self.Y.min(), self.Y.max()])
+            self.im.set_extent((self.X.min(), self.X.max(), self.Y.min(), self.Y.max()))
 
             # Update colorbar range
             self.im.set_clim(vmin=self.Z.min(), vmax=self.Z.max())
@@ -444,11 +449,11 @@ class InteractiveTerrainViewer:
         self.fig.canvas.draw()
 
     def reset_view(self, event):
-        self.ax_3d.view_init(elev=30, azim=45)
+        self.ax_3d.view_init(elev=30, azim=45)  # type: ignore
         self.fig.canvas.draw()
 
     def isometric_view(self, event):
-        self.ax_3d.view_init(elev=35.26, azim=45)
+        self.ax_3d.view_init(elev=35.26, azim=45)  # type: ignore
         self.fig.canvas.draw()
 
     def toggle_wireframe(self, label):
@@ -474,6 +479,10 @@ class InteractiveTerrainViewer:
         self.fig.canvas.draw()
 
     def export_parameters(self, event):
+        # Extract 3D properties with type ignore
+        elev_val = self.ax_3d.elev  # type: ignore
+        azim_val = self.ax_3d.azim  # type: ignore
+
         params = f"""# Terrain Parameters for vsketch
 terrain_params = {{
     'resolution': {self.terrain_params["resolution"]},
@@ -485,8 +494,8 @@ terrain_params = {{
 }}
 
 # Current viewing angle (for isometric):
-elev = {self.ax_3d.elev:.1f}
-azim = {self.ax_3d.azim:.1f}"""
+elev = {elev_val:.1f}
+azim = {azim_val:.1f}"""
 
         print("=" * 50)
         print("EXPORTED TERRAIN PARAMETERS")
