@@ -1,0 +1,12 @@
+[
+  {
+    "label": "Run vsketch",
+    "command": "vsk run main.py",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "hide": "never",
+    "shell": "system",
+    "tags": ["vsketch", "run"]
+  }
+]
