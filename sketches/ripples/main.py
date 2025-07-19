@@ -4,14 +4,16 @@ import numpy as np
 import json
 import os
 from datetime import datetime
+from typing import List, Dict, Any, Optional, Tuple
 
 
 class RippleLineGenerator:
-    def __init__(self):
-        pass
+    """Generates water ripple patterns from a list of ripples with individual parameters."""
 
-    def generate_ripples(self, width, height, ripple_list):
-        """Generate water ripple pattern from list of ripples with individual parameters"""
+    def generate_ripples(
+        self, width: int, height: int, ripple_list: List[Dict[str, Any]]
+    ) -> np.ndarray:
+        """Generate water ripple pattern from list of ripples with individual parameters."""
         x = np.arange(width)
         y = np.arange(height)
         X, Y = np.meshgrid(x, y)
@@ -40,6 +42,8 @@ class RippleLineGenerator:
 
 
 class AdvancedRippleLineViewer:
+    """Interactive viewer for advanced ripple line patterns with 3D visualization."""
+
     def __init__(self):
         # Set up the figure
         self.fig = plt.figure(figsize=(18, 10))
@@ -68,22 +72,23 @@ class AdvancedRippleLineViewer:
         }
 
         # List of ripples with individual parameters
-        self.ripple_list = []
-        self.selected_ripple_index = None
+        self.ripple_list: List[Dict[str, Any]] = []
+        self.selected_ripple_index: Optional[int] = None
 
         # Drag state
         self.dragging = False
-        self.drag_ripple_index = None
+        self.drag_ripple_index: Optional[int] = None
         self.drag_offset_x = 0
         self.drag_offset_y = 0
 
         self.colorbar = None
         self.im = None
         self._axes_cleared = True
+        self.ripple_data: Optional[np.ndarray] = None
 
         # Initialize marker and text tracking lists
-        self._ripple_markers = []
-        self._ripple_texts = []
+        self._ripple_markers: List[Any] = []
+        self._ripple_texts: List[Any] = []
 
         # Flag to prevent pattern generation during slider updates
         self._updating_sliders = False
@@ -98,6 +103,7 @@ class AdvancedRippleLineViewer:
         self.setup_interaction()
 
     def create_controls(self):
+        """Create all UI controls (sliders, buttons, radio buttons)."""
         # Create sliders at the bottom of the figure
         slider_height = 0.025
         slider_spacing = 0.03
@@ -170,7 +176,7 @@ class AdvancedRippleLineViewer:
         )
         self.slider_distortion.on_changed(self.update_distortion)
 
-        # Buttons - reorganized to avoid overlaps
+        # Buttons
         button_width = 0.08
         button_height = 0.035
         button_left = 0.4
@@ -212,23 +218,13 @@ class AdvancedRippleLineViewer:
         self.btn_iso = Button(ax_iso, "Isometric")
         self.btn_iso.on_clicked(self.isometric_view)
 
-        # Direction radio buttons - moved to bottom right corner
+        # Direction radio buttons
         ax_direction = plt.axes((0.85, 0.02, 0.12, 0.08))
         self.radio_direction = RadioButtons(ax_direction, ("vertical", "horizontal"))
         self.radio_direction.on_clicked(self.update_direction)
 
-        # Add ripple info text
-        self.info_text = self.fig.text(
-            0.02,
-            0.02,
-            "",
-            fontsize=10,
-            verticalalignment="bottom",
-            bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgray", alpha=0.8),
-        )
-        self.update_info_text()
-
     def generate_pattern(self):
+        """Generate the ripple pattern and update all plots."""
         resolution = self.params["resolution"]
 
         # Generate ripple height map
@@ -236,80 +232,60 @@ class AdvancedRippleLineViewer:
 
         if len(self.ripple_list) == 0:
             # No ripples - create flat surface
-
             self.ripple_data = np.zeros((resolution, resolution))
         else:
             self.ripple_data = ripple_gen.generate_ripples(
                 resolution, resolution, self.ripple_list
             )
 
-        # Update plots - complete redraw each time
-        try:
-            self.update_3d_plot()
-        except Exception:
-            pass
-
-        try:
-            self.update_ripple_plot()
-        except Exception:
-            import traceback
-
-            traceback.print_exc()
-
-        try:
-            self.update_info_text()
-        except Exception:
-            pass
+        # Update plots
+        self.update_3d_plot()
+        self.update_ripple_plot()
 
     def update_3d_plot(self):
+        """Update the 3D line plot with current ripple data."""
+        if self.ripple_data is None:
+            return
+
         self.ax_3d.clear()
-
-        resolution = self.params["resolution"]
-        line_spacing = self.params["line_spacing"]
-        distortion_scale = self.params["distortion_scale"]
-
-        # Remove all axes elements for clean view
         self.ax_3d.set_axis_off()
+        resolution = self.params["resolution"]
 
+        # Create distorted lines based on direction
         if self.params["line_direction"] == "vertical":
-            # Vertical lines distorted by ripples
-            for x in range(0, resolution, line_spacing):
-                if x < resolution:
-                    line_heights = self.ripple_data[:, x]
-                    y_coords = np.arange(len(line_heights))
-                    x_distorted = x + line_heights * distortion_scale
-                    z_coords = line_heights  # Use height for 3D effect
+            # Vertical lines (constant x, varying y)
+            for i in range(0, resolution, self.params["line_spacing"]):
+                x_coords = np.full(resolution, i)
+                y_coords = np.arange(resolution)
+                z_coords = self.ripple_data[:, i] * self.params["distortion_scale"]
 
-                    self.ax_3d.plot(
-                        x_distorted, y_coords, z_coords, "k-", linewidth=0.8
-                    )
+                # Apply y-distortion based on ripple height
+                y_distorted = (
+                    y_coords + self.ripple_data[:, i] * self.params["distortion_scale"]
+                )
+
+                self.ax_3d.plot(x_coords, y_distorted, z_coords, "k-", linewidth=0.8)
         else:
-            # Horizontal lines distorted by ripples
-            for y in range(0, resolution, line_spacing):
-                if y < resolution:
-                    line_heights = self.ripple_data[y, :]
-                    x_coords = np.arange(len(line_heights))
-                    y_distorted = y + line_heights * distortion_scale
-                    z_coords = line_heights  # Use height for 3D effect
+            # Horizontal lines (constant y, varying x)
+            for i in range(0, resolution, self.params["line_spacing"]):
+                y_coords = np.full(resolution, i)
+                x_coords = np.arange(resolution)
+                z_coords = self.ripple_data[i, :] * self.params["distortion_scale"]
 
-                    self.ax_3d.plot(
-                        x_coords, y_distorted, z_coords, "k-", linewidth=0.8
-                    )
+                # Apply x-distortion based on ripple height
+                x_distorted = (
+                    x_coords + self.ripple_data[i, :] * self.params["distortion_scale"]
+                )
+
+                self.ax_3d.plot(x_distorted, y_coords, z_coords, "k-", linewidth=0.8)
 
         # Mark ripple centers in 3D
         for i, ripple in enumerate(self.ripple_list):
             center_x, center_y = ripple["center"]
-            z_height = (
-                self.ripple_data[center_y, center_x]
-                if center_y < resolution and center_x < resolution
-                else 0
-            )
 
             color = "red" if i == self.selected_ripple_index else "blue"
             marker_size = 100 if i == self.selected_ripple_index else 50
-            self.ax_3d.scatter(
-                [center_x], [center_y], c=color, s=marker_size, alpha=0.8
-            )
+            self.ax_3d.scatter(center_x, center_y, c=color, s=marker_size, alpha=0.8)
 
         # Set limits and aspect
         self.ax_3d.set_xlim(0, resolution)
@@ -317,11 +293,14 @@ class AdvancedRippleLineViewer:
         if len(self.ripple_list) > 0:
             z_min, z_max = self.ripple_data.min(), self.ripple_data.max()
             z_range = max(abs(z_min), abs(z_max), 1)
-            self.ax_3d.set_zlim(-z_range, z_range)  # type: ignore
+            self.ax_3d.set_zlim(  # type: ignore
+                -z_range * self.params["distortion_scale"],
+                z_range * self.params["distortion_scale"],
+            )
 
         self.ax_3d.set_title("3D Lines (Drag to Rotate View)")
 
-        # Add text overlay to make it clear
+        # Add instruction text
         self.ax_3d.text2D(  # type: ignore
             0.02,
             0.98,
@@ -333,394 +312,292 @@ class AdvancedRippleLineViewer:
         )
 
     def update_ripple_plot(self):
-        # Clear existing contours
-        if hasattr(self, "_contours"):
-            try:
-                for coll in self._contours.collections:  # type: ignore
-                    coll.remove()
-            except (AttributeError, TypeError):
-                try:
-                    if hasattr(self._contours, "remove"):
-                        self._contours.remove()
-                    else:
-                        self.ax_ripples.clear()
-                        if self.im is not None:
-                            self.im = None
-                except:
-                    pass
+        """Update the 2D ripple height map plot."""
+        if self.ripple_data is None:
+            return
 
-        # Clear existing ripple markers and text annotations
-        if hasattr(self, "_ripple_markers"):
-            for marker in self._ripple_markers:
-                try:
-                    marker.remove()
-                except:
-                    pass
-        if hasattr(self, "_ripple_texts"):
-            for text in self._ripple_texts:
-                try:
-                    text.remove()
-                except:
-                    pass
-
-        # Initialize marker and text tracking lists
-        self._ripple_markers = []
-        self._ripple_texts = []
+        # Clear existing elements
+        self._clear_ripple_markers()
 
         if self.im is None:
-            if not hasattr(self, "_axes_cleared") or self._axes_cleared:
-                self.ax_ripples.clear()
-                self._axes_cleared = False
-
             self.im = self.ax_ripples.imshow(
                 self.ripple_data,
-                cmap="RdBu",
-                origin="upper",
                 extent=(0, self.params["resolution"], 0, self.params["resolution"]),
+                origin="lower",
+                cmap="RdBu_r",
+                interpolation="bilinear",
             )
-
-            self.ax_ripples.set_xlabel("X")
-            self.ax_ripples.set_ylabel("Y")
-            self.ax_ripples.set_title("Height Map - CLICK to Add, DRAG to Move Ripples")
-            self.ax_ripples.set_aspect("equal")
 
             if self.colorbar is None:
-                self.colorbar = plt.colorbar(
-                    self.im, ax=self.ax_ripples, shrink=0.8, label="Height"
-                )
+                self.colorbar = plt.colorbar(self.im, ax=self.ax_ripples, shrink=0.8)
         else:
-            self.im.set_array(self.ripple_data)
+            self.im.set_data(self.ripple_data)
             self.im.set_clim(vmin=self.ripple_data.min(), vmax=self.ripple_data.max())
-            if self.colorbar is not None:
-                self.colorbar.update_normal(self.im)
 
-        # Add contour lines
-        try:
-            x = np.arange(self.params["resolution"])
-            y = np.arange(self.params["resolution"])
-            X, Y = np.meshgrid(x, y)
-            self._contours = self.ax_ripples.contour(
-                X,
-                Y,
-                self.ripple_data,
-                levels=10,
-                colors="black",
-                alpha=0.3,
-                linewidths=0.5,
-            )
-        except Exception:
-            pass
-
-        # Mark ripple centers with selection indication
+        # Draw ripple centers and labels
         for i, ripple in enumerate(self.ripple_list):
             center_x, center_y = ripple["center"]
 
-            if i == self.selected_ripple_index:
-                # Selected ripple - red with larger size
-                marker = self.ax_ripples.plot(
-                    center_x,
-                    center_y,
-                    "ro",
-                    markersize=12,
-                    markeredgecolor="darkred",
-                    markeredgewidth=2,
-                )
-                self._ripple_markers.extend(marker)
+            color = "red" if i == self.selected_ripple_index else "blue"
+            marker_size = 100 if i == self.selected_ripple_index else 50
 
-                # Add text with parameters
-                text = self.ax_ripples.text(
-                    center_x + 5,
-                    center_y + 5,
-                    f"F:{ripple['frequency']:.3f}\nA:{ripple['amplitude']:.2f}\nD:{ripple['decay']:.3f}",
-                    fontsize=8,
-                    bbox=dict(boxstyle="round,pad=0.2", facecolor="white", alpha=0.8),
-                )
-                self._ripple_texts.append(text)
-            else:
-                # Unselected ripples - blue
-                marker = self.ax_ripples.plot(
-                    center_x,
-                    center_y,
-                    "bo",
-                    markersize=8,
-                    markeredgecolor="darkblue",
-                    markeredgewidth=1,
-                )
-                self._ripple_markers.extend(marker)
+            marker = self.ax_ripples.scatter(
+                center_x,
+                center_y,
+                c=color,
+                s=marker_size,
+                alpha=0.8,
+                edgecolors="white",
+            )
+            self._ripple_markers.append(marker)
 
-    def update_info_text(self):
-        if self.selected_ripple_index is not None and self.selected_ripple_index < len(
-            self.ripple_list
-        ):
-            ripple = self.ripple_list[self.selected_ripple_index]
-            info = f"Selected Ripple {self.selected_ripple_index + 1}: Center({ripple['center'][0]}, {ripple['center'][1]}) | "
-            info += f"Freq: {ripple['frequency']:.3f} | Amp: {ripple['amplitude']:.2f} | Decay: {ripple['decay']:.3f}"
-        else:
-            info = f"Total Ripples: {len(self.ripple_list)} | Click RIGHT plot to add ripples | Drag existing ripples to move"
+            text = self.ax_ripples.text(
+                center_x + 2,
+                center_y + 2,
+                f"R{i}",
+                fontsize=8,
+                color="white",
+                weight="bold",
+            )
+            self._ripple_texts.append(text)
 
-        info += "\nLEFT: Drag to rotate 3D view | RIGHT: Click=add, Drag=move ripples"
-        self.info_text.set_text(info)
+        self.ax_ripples.set_title("Ripple Height Map (Click to Add/Select)")
+        self.ax_ripples.set_xlabel("X")
+        self.ax_ripples.set_ylabel("Y")
+
+    def _clear_ripple_markers(self):
+        """Clear existing ripple markers and text annotations."""
+        for marker in self._ripple_markers:
+            try:
+                marker.remove()
+            except (ValueError, AttributeError):
+                pass
+
+        for text in self._ripple_texts:
+            try:
+                text.remove()
+            except (ValueError, AttributeError):
+                pass
+
+        self._ripple_markers = []
+        self._ripple_texts = []
 
     def setup_interaction(self):
-        # Add mouse events for drag functionality
-        self.cid_press = self.fig.canvas.mpl_connect(
-            "button_press_event", self.on_mouse_press
-        )
-        self.cid_motion = self.fig.canvas.mpl_connect(
-            "motion_notify_event", self.on_mouse_motion
-        )
-        self.cid_release = self.fig.canvas.mpl_connect(
-            "button_release_event", self.on_mouse_release
-        )
-        self.fig.canvas.mpl_connect("key_press_event", self.on_key_press)
+        """Set up mouse and keyboard interaction."""
+        self.fig.canvas.mpl_connect("button_press_event", self.on_mouse_press)
+        self.fig.canvas.mpl_connect("motion_notify_event", self.on_mouse_motion)
+        self.fig.canvas.mpl_connect("button_release_event", self.on_mouse_release)
 
     def on_mouse_press(self, event):
-        if event.button == 1 and event.inaxes == self.ax_ripples:
-            click_x = event.xdata
-            click_y = event.ydata
+        """Handle mouse press events."""
+        if event.inaxes != self.ax_ripples or event.button not in [1, 3]:
+            return
 
-            if click_x is not None and click_y is not None:
-                resolution = self.params["resolution"]
-                grid_x = max(0, min(resolution - 1, int(click_x)))
-                grid_y = max(0, min(resolution - 1, int(click_y)))
+        click_x, click_y = event.xdata, event.ydata
+        if click_x is None or click_y is None:
+            return
 
-                # Check if clicking near existing ripple (within 15 pixels for easier dragging)
-                clicked_ripple = None
-                for i, ripple in enumerate(self.ripple_list):
-                    cx, cy = ripple["center"]
-                    if abs(cx - grid_x) < 15 and abs(cy - grid_y) < 15:
-                        clicked_ripple = i
-                        break
+        # Find closest ripple
+        closest_index, closest_distance = self._find_closest_ripple(click_x, click_y)
 
-                if clicked_ripple is not None:
-                    # Start dragging existing ripple - DON'T regenerate anything
+        if event.button == 1:  # Left click
+            if closest_distance < 10 and closest_index is not None:
+                # Select and prepare to drag existing ripple
+                self.selected_ripple_index = closest_index
+                self.dragging = True
+                self.drag_ripple_index = closest_index
 
-                    self.dragging = True
-                    self.drag_ripple_index = clicked_ripple
-                    self.selected_ripple_index = clicked_ripple
+                ripple_center = self.ripple_list[closest_index]["center"]
+                self.drag_offset_x = click_x - ripple_center[0]
+                self.drag_offset_y = click_y - ripple_center[1]
 
-                    # Calculate offset for smooth dragging
-                    cx, cy = self.ripple_list[clicked_ripple]["center"]
-                    self.drag_offset_x = cx - grid_x
-                    self.drag_offset_y = cy - grid_y
+                # Update sliders to match selected ripple
+                self._update_sliders_for_ripple(closest_index)
+            else:
+                # Add new ripple
+                new_ripple = {
+                    "center": (click_x, click_y),
+                    "frequency": self.current_ripple_params["frequency"],
+                    "amplitude": self.current_ripple_params["amplitude"],
+                    "decay": self.current_ripple_params["decay"],
+                }
+                self.ripple_list.append(new_ripple)
+                self.selected_ripple_index = len(self.ripple_list) - 1
 
-                    # Update sliders to show this ripple's parameters WITHOUT triggering regeneration
-                    ripple = self.ripple_list[clicked_ripple]
-                    # Set flag to prevent pattern generation during slider updates
-                    self._updating_sliders = True
+        elif event.button == 3:  # Right click - delete ripple
+            if closest_distance < 10 and closest_index is not None:
+                self.ripple_list.pop(closest_index)
+                if self.selected_ripple_index == closest_index:
+                    self.selected_ripple_index = None
+                elif (
+                    self.selected_ripple_index is not None
+                    and self.selected_ripple_index > closest_index
+                ):
+                    self.selected_ripple_index -= 1
 
-                    self.slider_frequency.set_val(ripple["frequency"])
-                    self.slider_amplitude.set_val(ripple["amplitude"])
-                    self.slider_decay.set_val(ripple["decay"])
+        self.generate_pattern()
+        self.fig.canvas.draw()
 
-                    # Clear flag after updating sliders
-                    self._updating_sliders = False
+    def _find_closest_ripple(self, x: float, y: float) -> Tuple[Optional[int], float]:
+        """Find the closest ripple to the given coordinates."""
+        if not self.ripple_list:
+            return None, float("inf")
 
-                    # Update display but don't regenerate pattern
-                    self.update_info_text()
-                else:
-                    # Add new ripple only if not dragging
+        distances = []
+        for i, ripple in enumerate(self.ripple_list):
+            center_x, center_y = ripple["center"]
+            distance = np.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
+            distances.append(distance)
 
-                    new_ripple = {
-                        "center": (grid_x, grid_y),
-                        "frequency": self.current_ripple_params["frequency"],
-                        "amplitude": self.current_ripple_params["amplitude"],
-                        "decay": self.current_ripple_params["decay"],
-                    }
-                    self.ripple_list.append(new_ripple)
-                    self.selected_ripple_index = len(self.ripple_list) - 1
+        closest_index = int(np.argmin(distances))
+        return closest_index, distances[closest_index]
 
-                    # Only regenerate for new ripples, not for drag start
-                    self.generate_pattern()
-                    self.fig.canvas.draw()
+    def _update_sliders_for_ripple(self, ripple_index: int):
+        """Update sliders to match the parameters of the selected ripple."""
+        if ripple_index >= len(self.ripple_list):
+            return
+
+        ripple = self.ripple_list[ripple_index]
+        self._updating_sliders = True
+
+        self.slider_frequency.set_val(ripple["frequency"])
+        self.slider_amplitude.set_val(ripple["amplitude"])
+        self.slider_decay.set_val(ripple["decay"])
+
+        self._updating_sliders = False
 
     def on_mouse_motion(self, event):
-        if self.dragging and event.inaxes == self.ax_ripples:
-            click_x = event.xdata
-            click_y = event.ydata
+        """Handle mouse motion events for dragging ripples."""
+        if not self.dragging or self.drag_ripple_index is None:
+            return
 
-            if click_x is not None and click_y is not None:
-                resolution = self.params["resolution"]
-                # Apply offset for smooth dragging
-                new_x = max(0, min(resolution - 1, int(click_x + self.drag_offset_x)))
-                new_y = max(0, min(resolution - 1, int(click_y + self.drag_offset_y)))
+        if (
+            event.inaxes != self.ax_ripples
+            or event.xdata is None
+            or event.ydata is None
+        ):
+            return
 
-                # Update ripple position and show real-time feedback
-                if self.drag_ripple_index is not None and self.drag_ripple_index < len(
-                    self.ripple_list
-                ):
-                    self.ripple_list[self.drag_ripple_index]["center"] = (new_x, new_y)
+        # Update ripple position
+        new_x = event.xdata - self.drag_offset_x
+        new_y = event.ydata - self.drag_offset_y
 
-                    # Update only the ripple plot for real-time feedback
-                    self.update_ripple_plot()
-                    self.fig.canvas.draw()
+        # Clamp to bounds
+        resolution = self.params["resolution"]
+        new_x = max(0, min(resolution - 1, new_x))
+        new_y = max(0, min(resolution - 1, new_y))
+
+        self.ripple_list[self.drag_ripple_index]["center"] = (new_x, new_y)
+
+        self.generate_pattern()
+        self.fig.canvas.draw()
 
     def on_mouse_release(self, event):
-        if self.dragging:
-            self.dragging = False
-            self.drag_ripple_index = None
-            # Only do full regeneration when drag is complete
-
-            self.generate_pattern()
-            self.fig.canvas.draw()
+        """Handle mouse release events."""
+        self.dragging = False
+        self.drag_ripple_index = None
 
     def clear_ripples(self, event):
-        # Clear the ripple data
-        self.ripple_list = []
+        """Clear all ripples."""
+        self.ripple_list.clear()
         self.selected_ripple_index = None
         self.dragging = False
         self.drag_ripple_index = None
 
-        # Clear existing ripple markers and text annotations from plot
-        if hasattr(self, "_ripple_markers"):
-            for marker in self._ripple_markers:
-                try:
-                    marker.remove()
-                except:
-                    pass
-        if hasattr(self, "_ripple_texts"):
-            for text in self._ripple_texts:
-                try:
-                    text.remove()
-                except:
-                    pass
-
-        # Clear marker and text tracking lists
-        self._ripple_markers = []
-        self._ripple_texts = []
-
-        # Force complete regeneration
+        self._clear_ripple_markers()
         self.generate_pattern()
         self.fig.canvas.draw()
 
     def delete_selected_ripple(self, event):
+        """Delete the currently selected ripple."""
         if self.selected_ripple_index is not None and self.selected_ripple_index < len(
             self.ripple_list
         ):
             self.ripple_list.pop(self.selected_ripple_index)
             self.selected_ripple_index = None
-            self.dragging = False
-            self.drag_ripple_index = None
 
             self.generate_pattern()
             self.fig.canvas.draw()
 
     def update_frequency(self, val):
+        """Update frequency parameter."""
         self.current_ripple_params["frequency"] = val
-        if self.selected_ripple_index is not None and self.selected_ripple_index < len(
-            self.ripple_list
-        ):
+        if not self._updating_sliders and self.selected_ripple_index is not None:
             self.ripple_list[self.selected_ripple_index]["frequency"] = val
-            if not self._updating_sliders:
-                self.generate_pattern()
-                self.fig.canvas.draw()
+            self.generate_pattern()
+            self.fig.canvas.draw()
 
     def update_amplitude(self, val):
+        """Update amplitude parameter."""
         self.current_ripple_params["amplitude"] = val
-        if self.selected_ripple_index is not None and self.selected_ripple_index < len(
-            self.ripple_list
-        ):
+        if not self._updating_sliders and self.selected_ripple_index is not None:
             self.ripple_list[self.selected_ripple_index]["amplitude"] = val
-            if not self._updating_sliders:
-                self.generate_pattern()
-                self.fig.canvas.draw()
+            self.generate_pattern()
+            self.fig.canvas.draw()
 
     def update_decay(self, val):
+        """Update decay parameter."""
         self.current_ripple_params["decay"] = val
-        if self.selected_ripple_index is not None and self.selected_ripple_index < len(
-            self.ripple_list
-        ):
+        if not self._updating_sliders and self.selected_ripple_index is not None:
             self.ripple_list[self.selected_ripple_index]["decay"] = val
-            if not self._updating_sliders:
-                self.generate_pattern()
-                self.fig.canvas.draw()
+            self.generate_pattern()
+            self.fig.canvas.draw()
 
     def update_spacing(self, val):
+        """Update line spacing parameter."""
         self.params["line_spacing"] = int(val)
-        self.update_3d_plot()
+        self.generate_pattern()
         self.fig.canvas.draw()
 
     def update_distortion(self, val):
+        """Update distortion scale parameter."""
         self.params["distortion_scale"] = val
-        self.update_3d_plot()
+        self.generate_pattern()
         self.fig.canvas.draw()
 
     def update_direction(self, label):
+        """Update line direction parameter."""
         self.params["line_direction"] = label
-        self.update_3d_plot()
+        self.generate_pattern()
         self.fig.canvas.draw()
 
     def reset_view(self, event):
-        self.ax_3d.view_init(elev=30, azim=-45)  # type: ignore
+        """Reset the 3D view to default."""
+        self.ax_3d.view_init(elev=20, azim=-60)  # type: ignore
         self.fig.canvas.draw()
 
     def isometric_view(self, event):
-        self.ax_3d.view_init(elev=30, azim=-60)  # type: ignore
+        """Set isometric view for 3D plot."""
+        self.ax_3d.view_init(elev=30, azim=45)  # type: ignore
         self.fig.canvas.draw()
 
     def export_parameters(self, event):
-        """Save current pattern parameters to JSON config file."""
+        """Export current parameters to JSON file."""
         # Create config directory if it doesn't exist
         config_dir = "config"
         os.makedirs(config_dir, exist_ok=True)
 
-        # Generate config filename with timestamp
-        from datetime import datetime
-
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        config_filename = f"ripple_pattern_{timestamp}.json"
-        config_path = os.path.join(config_dir, config_filename)
+        filename = f"ripple_pattern_{timestamp}.json"
+        filepath = os.path.join(config_dir, filename)
 
-        # Build flattened config dictionary for vsketch
-        config = {
-            "resolution": self.params["resolution"],
-            "line_spacing": self.params["line_spacing"],
-            "line_direction": 0 if self.params["line_direction"] == "vertical" else 1,
-            "distortion_scale": self.params["distortion_scale"],
-            "__seed__": 0,
+        export_data = {
+            "params": self.params,
+            "current_ripple_params": self.current_ripple_params,
+            "ripple_list": self.ripple_list,
+            "selected_ripple_index": self.selected_ripple_index,
+            "export_timestamp": timestamp,
         }
 
-        # Add ripples as flattened parameters (up to 8 ripples)
-        for i in range(8):
-            ripple_num = i + 1
-            if i < len(self.ripple_list):
-                ripple = self.ripple_list[i]
-                config[f"ripple_{ripple_num}_center_x"] = ripple["center"][0]
-                config[f"ripple_{ripple_num}_center_y"] = ripple["center"][1]
-                config[f"ripple_{ripple_num}_frequency"] = ripple["frequency"]
-                config[f"ripple_{ripple_num}_amplitude"] = ripple["amplitude"]
-                config[f"ripple_{ripple_num}_decay"] = ripple["decay"]
-                config[f"ripple_{ripple_num}_enabled"] = True
-            else:
-                # Disabled ripple with default values
-                config[f"ripple_{ripple_num}_center_x"] = 50.0
-                config[f"ripple_{ripple_num}_center_y"] = 50.0
-                config[f"ripple_{ripple_num}_frequency"] = 0.05
-                config[f"ripple_{ripple_num}_amplitude"] = 1.0
-                config[f"ripple_{ripple_num}_decay"] = 0.02
-                config[f"ripple_{ripple_num}_enabled"] = False
-
-        # Save to JSON file
         try:
-            with open(config_path, "w") as f:
-                json.dump(config, f, indent=2)
-
-            print("=" * 50)
-            print("SAVED RIPPLE PATTERN CONFIG")
-            print("=" * 50)
-            print(f"Config saved to: {config_path}")
-            print(f"Parameters: {len(self.ripple_list)} ripples")
-            print(f"Resolution: {self.params['resolution']}")
-            print(f"Line direction: {self.params['line_direction']}")
-            print("Run vsketch manually to use this config")
-            print("=" * 50)
-
-        except Exception as e:
-            print(f"Error saving config: {e}")
+            with open(filepath, "w") as f:
+                json.dump(export_data, f, indent=2)
+            print(f"Parameters exported to: {filepath}")
+        except IOError as e:
+            print(f"Error exporting parameters: {e}")
 
     def export_svg(self, event):
-        """Export only the 3D subplot to SVG with preserved orientation."""
-
+        """Export the 3D plot to SVG format."""
         # Create output directory
         output_dir = "svg_exports"
         os.makedirs(output_dir, exist_ok=True)
@@ -730,14 +607,7 @@ class AdvancedRippleLineViewer:
         svg_path = os.path.join(output_dir, svg_filename)
 
         try:
-            # Capture current view parameters
-            current_elev = self.ax_3d.elev
-            current_azim = self.ax_3d.azim
-            current_xlim = self.ax_3d.get_xlim()
-            current_ylim = self.ax_3d.get_ylim()
-            current_zlim = self.ax_3d.get_zlim()
-
-            # Create a new figure with just the 3D subplot - ensure exact 9x12 inches
+            # Create a new figure with just the 3D subplot
             fig_export = plt.figure(figsize=(9, 12))
             fig_export.subplots_adjust(left=0, right=1, top=1, bottom=0)
             ax_export = fig_export.add_subplot(111, projection="3d")
@@ -745,7 +615,7 @@ class AdvancedRippleLineViewer:
             # Copy all the lines from the 3D subplot
             for line in self.ax_3d.lines:
                 # Get the 3D line data
-                xdata, ydata, zdata = line._verts3d
+                xdata, ydata, zdata = line._verts3d  # type: ignore
                 ax_export.plot(
                     xdata,
                     ydata,
@@ -754,25 +624,28 @@ class AdvancedRippleLineViewer:
                     linewidth=line.get_linewidth(),
                 )
 
-            # Apply the exact view settings
-            ax_export.view_init(elev=current_elev, azim=current_azim)
-            ax_export.set_xlim(current_xlim)
-            ax_export.set_ylim(current_ylim)
-            ax_export.set_zlim(current_zlim)
+            # Apply the current view settings
+            ax_export.view_init(elev=self.ax_3d.elev, azim=self.ax_3d.azim)  # type: ignore
+            xlim = self.ax_3d.get_xlim()
+            ylim = self.ax_3d.get_ylim()
+            zlim = self.ax_3d.get_zlim()  # type: ignore
+            ax_export.set_xlim(xlim[0], xlim[1])
+            ax_export.set_ylim(ylim[0], ylim[1])
+            ax_export.set_zlim(zlim[0], zlim[1])  # type: ignore
 
-            # Remove grid, axes, and background for clean line output
+            # Clean appearance for export
             ax_export.grid(False)
             ax_export.axis("off")
-            # Remove 3D axis panes
-            ax_export.xaxis.pane.fill = False
-            ax_export.yaxis.pane.fill = False
-            ax_export.zaxis.pane.fill = False
-            # Make pane edges invisible
-            ax_export.xaxis.pane.set_edgecolor("none")
-            ax_export.yaxis.pane.set_edgecolor("none")
-            ax_export.zaxis.pane.set_edgecolor("none")
 
-            # Save as SVG with exact 9x12 inch dimensions
+            # Remove 3D axis panes
+            ax_export.xaxis.pane.fill = False  # type: ignore
+            ax_export.yaxis.pane.fill = False  # type: ignore
+            ax_export.zaxis.pane.fill = False  # type: ignore
+            ax_export.xaxis.pane.set_edgecolor("none")  # type: ignore
+            ax_export.yaxis.pane.set_edgecolor("none")  # type: ignore
+            ax_export.zaxis.pane.set_edgecolor("none")  # type: ignore
+
+            # Save as SVG
             fig_export.savefig(
                 svg_path,
                 format="svg",
@@ -780,34 +653,18 @@ class AdvancedRippleLineViewer:
                 bbox_inches=None,
                 facecolor="white",
             )
-            plt.close(fig_export)
+            print(f"SVG exported to: {svg_path}")
 
-        except Exception as e:
+        except (IOError, OSError, RuntimeError) as e:
             print(f"Error exporting SVG: {e}")
 
-    def on_key_press(self, event):
-        if event.key == "c":
-            self.clear_ripples(None)
-        elif event.key == "d":
-            # Toggle direction
-            current = self.params["line_direction"]
-            new_direction = "horizontal" if current == "vertical" else "vertical"
-            options = ["vertical", "horizontal"]
-            self.radio_direction.set_active(options.index(new_direction))
-        elif event.key == "r":
-            self.reset_view(None)
-        elif event.key == "i":
-            self.isometric_view(None)
-        elif event.key == "delete" or event.key == "backspace":
-            self.delete_selected_ripple(None)
-        elif event.key == "e":
-            self.export_parameters(None)
-
     def show(self):
+        """Show the interactive plot."""
         plt.show()
 
 
 def main():
+    """Main entry point."""
     viewer = AdvancedRippleLineViewer()
     viewer.show()
 
