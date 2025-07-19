@@ -11,3 +11,5 @@ wheels/
 
 config/
 svg_exports/
+
+.DS_Store
