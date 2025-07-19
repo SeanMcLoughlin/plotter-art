@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button, RadioButtons
 import numpy as np
+import json
+import os
 
 
 class RippleLineGenerator:
@@ -185,15 +187,20 @@ class AdvancedRippleLineViewer:
         self.btn_delete = Button(ax_delete, "Delete Selected")
         self.btn_delete.on_clicked(self.delete_selected_ripple)
 
-        # Export button
+        # Save Config button
         ax_export = plt.axes((button_left, 0.15, button_width, button_height))
-        self.btn_export = Button(ax_export, "Export")
+        self.btn_export = Button(ax_export, "Save Config")
         self.btn_export.on_clicked(self.export_parameters)
 
-        # Reset view button
-        ax_reset_view = plt.axes(
+        # Export SVG button
+        ax_export_svg = plt.axes(
             (button_left + button_spacing, 0.15, button_width, button_height)
         )
+        self.btn_export_svg = Button(ax_export_svg, "Export SVG")
+        self.btn_export_svg.on_clicked(self.export_svg)
+
+        # Reset view button
+        ax_reset_view = plt.axes((button_left, 0.10, button_width, button_height))
         self.btn_reset_view = Button(ax_reset_view, "Reset View")
         self.btn_reset_view.on_clicked(self.reset_view)
 
@@ -651,36 +658,154 @@ class AdvancedRippleLineViewer:
         self.fig.canvas.draw()
 
     def export_parameters(self, event):
-        params = f"""# Advanced Ripple Line Distortion Parameters
-params = {{
-    'resolution': {self.params["resolution"]},
-    'line_spacing': {self.params["line_spacing"]},
-    'line_direction': '{self.params["line_direction"]}',
-    'distortion_scale': {self.params["distortion_scale"]:.1f},
-    'ripple_list': ["""
+        """Save current pattern parameters to JSON config file."""
+        # Create config directory if it doesn't exist
+        config_dir = "config"
+        os.makedirs(config_dir, exist_ok=True)
 
-        for ripple in self.ripple_list:
-            params += f"""
-        {{
-            'center': {ripple["center"]},
-            'frequency': {ripple["frequency"]:.3f},
-            'amplitude': {ripple["amplitude"]:.2f},
-            'decay': {ripple["decay"]:.3f}
-        }},"""
+        # Generate config filename with timestamp
+        from datetime import datetime
 
-        params += """
-    ]
-}}
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        config_filename = f"ripple_pattern_{timestamp}.json"
+        config_path = os.path.join(config_dir, config_filename)
 
-# Current 3D view angle:
-elev = {:.1f}
-azim = {:.1f}""".format(self.ax_3d.elev, self.ax_3d.azim)  # type: ignore
+        # Build flattened config dictionary for vsketch
+        config = {
+            "resolution": self.params["resolution"],
+            "line_spacing": self.params["line_spacing"],
+            "line_direction": 0 if self.params["line_direction"] == "vertical" else 1,
+            "distortion_scale": self.params["distortion_scale"],
+            "__seed__": 0,
+        }
 
-        print("=" * 60)
-        print("EXPORTED ADVANCED RIPPLE LINE PARAMETERS")
-        print("=" * 60)
-        print(params)
-        print("=" * 60)
+        # Add ripples as flattened parameters (up to 8 ripples)
+        for i in range(8):
+            ripple_num = i + 1
+            if i < len(self.ripple_list):
+                ripple = self.ripple_list[i]
+                config[f"ripple_{ripple_num}_center_x"] = ripple["center"][0]
+                config[f"ripple_{ripple_num}_center_y"] = ripple["center"][1]
+                config[f"ripple_{ripple_num}_frequency"] = ripple["frequency"]
+                config[f"ripple_{ripple_num}_amplitude"] = ripple["amplitude"]
+                config[f"ripple_{ripple_num}_decay"] = ripple["decay"]
+                config[f"ripple_{ripple_num}_enabled"] = True
+            else:
+                # Disabled ripple with default values
+                config[f"ripple_{ripple_num}_center_x"] = 50.0
+                config[f"ripple_{ripple_num}_center_y"] = 50.0
+                config[f"ripple_{ripple_num}_frequency"] = 0.05
+                config[f"ripple_{ripple_num}_amplitude"] = 1.0
+                config[f"ripple_{ripple_num}_decay"] = 0.02
+                config[f"ripple_{ripple_num}_enabled"] = False
+
+        # Save to JSON file
+        try:
+            with open(config_path, "w") as f:
+                json.dump(config, f, indent=2)
+
+            print("=" * 50)
+            print("SAVED RIPPLE PATTERN CONFIG")
+            print("=" * 50)
+            print(f"Config saved to: {config_path}")
+            print(f"Parameters: {len(self.ripple_list)} ripples")
+            print(f"Resolution: {self.params['resolution']}")
+            print(f"Line direction: {self.params['line_direction']}")
+            print("Run vsketch manually to use this config")
+            print("=" * 50)
+
+        except Exception as e:
+            print(f"Error saving config: {e}")
+
+    def export_svg(self, event):
+        """Export only the 3D subplot to SVG with preserved orientation."""
+
+        def do_svg_export():
+            # Create output directory
+            output_dir = "svg_exports"
+            os.makedirs(output_dir, exist_ok=True)
+
+            # Generate filename with timestamp
+            from datetime import datetime
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            svg_filename = f"ripple_pattern_{timestamp}.svg"
+            svg_path = os.path.join(output_dir, svg_filename)
+
+            try:
+                # Capture current view parameters
+                current_elev = self.ax_3d.elev
+                current_azim = self.ax_3d.azim
+                current_xlim = self.ax_3d.get_xlim()
+                current_ylim = self.ax_3d.get_ylim()
+                current_zlim = self.ax_3d.get_zlim()
+
+                # Create a new figure with just the 3D subplot - ensure exact 9x12 inches
+                fig_export = plt.figure(figsize=(9, 12))
+                fig_export.subplots_adjust(left=0, right=1, top=1, bottom=0)
+                ax_export = fig_export.add_subplot(111, projection="3d")
+
+                # Copy all the lines from the 3D subplot
+                for line in self.ax_3d.lines:
+                    # Get the 3D line data
+                    xdata, ydata, zdata = line._verts3d
+                    ax_export.plot(
+                        xdata,
+                        ydata,
+                        zdata,
+                        color=line.get_color(),
+                        linewidth=line.get_linewidth(),
+                    )
+
+                # Apply the exact view settings
+                ax_export.view_init(elev=current_elev, azim=current_azim)
+                ax_export.set_xlim(current_xlim)
+                ax_export.set_ylim(current_ylim)
+                ax_export.set_zlim(current_zlim)
+
+                # Remove grid, axes, and background for clean line output
+                ax_export.grid(False)
+                ax_export.axis("off")
+                # Remove 3D axis panes
+                ax_export.xaxis.pane.fill = False
+                ax_export.yaxis.pane.fill = False
+                ax_export.zaxis.pane.fill = False
+                # Make pane edges invisible
+                ax_export.xaxis.pane.set_edgecolor("none")
+                ax_export.yaxis.pane.set_edgecolor("none")
+                ax_export.zaxis.pane.set_edgecolor("none")
+
+                # Save as SVG with exact 9x12 inch dimensions
+                fig_export.savefig(
+                    svg_path,
+                    format="svg",
+                    dpi=72,
+                    bbox_inches=None,
+                    facecolor="white",
+                )
+                plt.close(fig_export)
+
+                print("=" * 50)
+                print("EXPORTED 3D SUBPLOT TO SVG")
+                print("=" * 50)
+                print(f"SVG saved to: {svg_path}")
+                print("Format: 9×12 inch plot")
+                print(f"View: elev={current_elev:.1f}°, azim={current_azim:.1f}°")
+                print(f"Parameters: {len(self.ripple_list)} ripples")
+                print("Ready for plotting!")
+                print("=" * 50)
+
+            except Exception as e:
+                print(f"Error exporting SVG: {e}")
+
+        # Use timer to defer export and avoid GUI crashes
+        # timer = self.fig.canvas.new_timer(interval=50)
+        # timer.single_shot = True
+        # timer.add_callback(do_svg_export)
+        # timer.start()
+        do_svg_export()
+
+        print("SVG export initiated - preserving current 3D orientation...")
 
     def on_key_press(self, event):
         if event.key == "c":
