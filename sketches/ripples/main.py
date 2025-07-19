@@ -3,6 +3,7 @@ from matplotlib.widgets import Slider, Button, RadioButtons
 import numpy as np
 import json
 import os
+from datetime import datetime
 
 
 class RippleLineGenerator:
@@ -52,8 +53,8 @@ class AdvancedRippleLineViewer:
 
         # Parameters
         self.params = {
-            "resolution": 200,
-            "line_spacing": 4,
+            "resolution": 100,
+            "line_spacing": 1,
             "line_direction": "vertical",
             "distortion_scale": 15.0,
             "manual_mode": True,
@@ -61,8 +62,8 @@ class AdvancedRippleLineViewer:
 
         # Current ripple parameters (for new ripples)
         self.current_ripple_params = {
-            "frequency": 0.08,
-            "amplitude": 1.0,
+            "frequency": 0.025,
+            "amplitude": 0.2,
             "decay": 0.02,
         }
 
@@ -720,92 +721,69 @@ class AdvancedRippleLineViewer:
     def export_svg(self, event):
         """Export only the 3D subplot to SVG with preserved orientation."""
 
-        def do_svg_export():
-            # Create output directory
-            output_dir = "svg_exports"
-            os.makedirs(output_dir, exist_ok=True)
+        # Create output directory
+        output_dir = "svg_exports"
+        os.makedirs(output_dir, exist_ok=True)
 
-            # Generate filename with timestamp
-            from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        svg_filename = f"ripple_pattern_{timestamp}.svg"
+        svg_path = os.path.join(output_dir, svg_filename)
 
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            svg_filename = f"ripple_pattern_{timestamp}.svg"
-            svg_path = os.path.join(output_dir, svg_filename)
+        try:
+            # Capture current view parameters
+            current_elev = self.ax_3d.elev
+            current_azim = self.ax_3d.azim
+            current_xlim = self.ax_3d.get_xlim()
+            current_ylim = self.ax_3d.get_ylim()
+            current_zlim = self.ax_3d.get_zlim()
 
-            try:
-                # Capture current view parameters
-                current_elev = self.ax_3d.elev
-                current_azim = self.ax_3d.azim
-                current_xlim = self.ax_3d.get_xlim()
-                current_ylim = self.ax_3d.get_ylim()
-                current_zlim = self.ax_3d.get_zlim()
+            # Create a new figure with just the 3D subplot - ensure exact 9x12 inches
+            fig_export = plt.figure(figsize=(9, 12))
+            fig_export.subplots_adjust(left=0, right=1, top=1, bottom=0)
+            ax_export = fig_export.add_subplot(111, projection="3d")
 
-                # Create a new figure with just the 3D subplot - ensure exact 9x12 inches
-                fig_export = plt.figure(figsize=(9, 12))
-                fig_export.subplots_adjust(left=0, right=1, top=1, bottom=0)
-                ax_export = fig_export.add_subplot(111, projection="3d")
-
-                # Copy all the lines from the 3D subplot
-                for line in self.ax_3d.lines:
-                    # Get the 3D line data
-                    xdata, ydata, zdata = line._verts3d
-                    ax_export.plot(
-                        xdata,
-                        ydata,
-                        zdata,
-                        color=line.get_color(),
-                        linewidth=line.get_linewidth(),
-                    )
-
-                # Apply the exact view settings
-                ax_export.view_init(elev=current_elev, azim=current_azim)
-                ax_export.set_xlim(current_xlim)
-                ax_export.set_ylim(current_ylim)
-                ax_export.set_zlim(current_zlim)
-
-                # Remove grid, axes, and background for clean line output
-                ax_export.grid(False)
-                ax_export.axis("off")
-                # Remove 3D axis panes
-                ax_export.xaxis.pane.fill = False
-                ax_export.yaxis.pane.fill = False
-                ax_export.zaxis.pane.fill = False
-                # Make pane edges invisible
-                ax_export.xaxis.pane.set_edgecolor("none")
-                ax_export.yaxis.pane.set_edgecolor("none")
-                ax_export.zaxis.pane.set_edgecolor("none")
-
-                # Save as SVG with exact 9x12 inch dimensions
-                fig_export.savefig(
-                    svg_path,
-                    format="svg",
-                    dpi=72,
-                    bbox_inches=None,
-                    facecolor="white",
+            # Copy all the lines from the 3D subplot
+            for line in self.ax_3d.lines:
+                # Get the 3D line data
+                xdata, ydata, zdata = line._verts3d
+                ax_export.plot(
+                    xdata,
+                    ydata,
+                    zdata,
+                    color=line.get_color(),
+                    linewidth=line.get_linewidth(),
                 )
-                plt.close(fig_export)
 
-                print("=" * 50)
-                print("EXPORTED 3D SUBPLOT TO SVG")
-                print("=" * 50)
-                print(f"SVG saved to: {svg_path}")
-                print("Format: 9×12 inch plot")
-                print(f"View: elev={current_elev:.1f}°, azim={current_azim:.1f}°")
-                print(f"Parameters: {len(self.ripple_list)} ripples")
-                print("Ready for plotting!")
-                print("=" * 50)
+            # Apply the exact view settings
+            ax_export.view_init(elev=current_elev, azim=current_azim)
+            ax_export.set_xlim(current_xlim)
+            ax_export.set_ylim(current_ylim)
+            ax_export.set_zlim(current_zlim)
 
-            except Exception as e:
-                print(f"Error exporting SVG: {e}")
+            # Remove grid, axes, and background for clean line output
+            ax_export.grid(False)
+            ax_export.axis("off")
+            # Remove 3D axis panes
+            ax_export.xaxis.pane.fill = False
+            ax_export.yaxis.pane.fill = False
+            ax_export.zaxis.pane.fill = False
+            # Make pane edges invisible
+            ax_export.xaxis.pane.set_edgecolor("none")
+            ax_export.yaxis.pane.set_edgecolor("none")
+            ax_export.zaxis.pane.set_edgecolor("none")
 
-        # Use timer to defer export and avoid GUI crashes
-        # timer = self.fig.canvas.new_timer(interval=50)
-        # timer.single_shot = True
-        # timer.add_callback(do_svg_export)
-        # timer.start()
-        do_svg_export()
+            # Save as SVG with exact 9x12 inch dimensions
+            fig_export.savefig(
+                svg_path,
+                format="svg",
+                dpi=72,
+                bbox_inches=None,
+                facecolor="white",
+            )
+            plt.close(fig_export)
 
-        print("SVG export initiated - preserving current 3D orientation...")
+        except Exception as e:
+            print(f"Error exporting SVG: {e}")
 
     def on_key_press(self, event):
         if event.key == "c":
