@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider, Button, RadioButtons
+from matplotlib.widgets import Slider, Button, RadioButtons, TextBox
 import numpy as np
-import json
 import os
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
@@ -64,6 +63,13 @@ class AdvancedRippleLineViewer:
             "manual_mode": True,
         }
 
+        # SVG export parameters
+        self.svg_params = {
+            "width": 9.0,
+            "height": 12.0,
+            "units": "inches",  # "inches", "mm", "cm"
+        }
+
         # Current ripple parameters (for new ripples)
         self.current_ripple_params = {
             "frequency": 0.025,
@@ -105,10 +111,10 @@ class AdvancedRippleLineViewer:
     def create_controls(self):
         """Create all UI controls (sliders, buttons, radio buttons)."""
         # Create sliders at the bottom of the figure
-        slider_height = 0.025
-        slider_spacing = 0.03
+        slider_height = 0.02
+        slider_spacing = 0.025
         slider_left = 0.1
-        slider_width = 0.25
+        slider_width = 0.2
 
         # Current ripple parameters (for new ripples or editing selected)
         ax_frequency = plt.axes((slider_left, 0.22, slider_width, slider_height))
@@ -176,11 +182,45 @@ class AdvancedRippleLineViewer:
         )
         self.slider_distortion.on_changed(self.update_distortion)
 
-        # Buttons
-        button_width = 0.08
-        button_height = 0.035
-        button_left = 0.4
-        button_spacing = 0.1
+        # SVG Export Settings - positioned in bottom area
+        svg_left = 0.55
+        svg_width = 0.12
+        svg_height = 0.025
+
+        # Add section label
+        self.fig.text(svg_left, 0.24, "SVG Export:", fontsize=9, weight="bold")
+
+        # SVG width text input
+        ax_svg_width = plt.axes((svg_left, 0.21, svg_width, svg_height))
+        self.text_svg_width = TextBox(
+            ax_svg_width,
+            "Width: ",
+            initial=str(self.svg_params["width"]),
+        )
+        self.text_svg_width.on_submit(self.update_svg_width)
+
+        # SVG height text input
+        ax_svg_height = plt.axes((svg_left, 0.18, svg_width, svg_height))
+        self.text_svg_height = TextBox(
+            ax_svg_height,
+            "Height: ",
+            initial=str(self.svg_params["height"]),
+        )
+        self.text_svg_height.on_submit(self.update_svg_height)
+
+        # SVG units radio buttons
+        ax_units = plt.axes((svg_left, 0.12, 0.1, 0.05))
+        self.radio_units = RadioButtons(ax_units, ("inches", "mm", "cm"))
+        self.radio_units.on_clicked(self.update_svg_units)
+        # Set initial selection
+        unit_options = ["inches", "mm", "cm"]
+        self.radio_units.set_active(unit_options.index(self.svg_params["units"]))
+
+        # Buttons - positioned below SVG controls
+        button_width = 0.065
+        button_height = 0.03
+        button_left = 0.36
+        button_spacing = 0.08
 
         # Clear ripples button
         ax_clear = plt.axes((button_left, 0.20, button_width, button_height))
@@ -194,32 +234,27 @@ class AdvancedRippleLineViewer:
         self.btn_delete = Button(ax_delete, "Delete Selected")
         self.btn_delete.on_clicked(self.delete_selected_ripple)
 
-        # Save Config button
-        ax_export = plt.axes((button_left, 0.15, button_width, button_height))
-        self.btn_export = Button(ax_export, "Save Config")
-        self.btn_export.on_clicked(self.export_parameters)
-
         # Export SVG button
         ax_export_svg = plt.axes(
-            (button_left + button_spacing, 0.15, button_width, button_height)
+            (button_left + button_spacing, 0.16, button_width, button_height)
         )
         self.btn_export_svg = Button(ax_export_svg, "Export SVG")
         self.btn_export_svg.on_clicked(self.export_svg)
 
         # Reset view button
-        ax_reset_view = plt.axes((button_left, 0.10, button_width, button_height))
+        ax_reset_view = plt.axes((button_left, 0.12, button_width, button_height))
         self.btn_reset_view = Button(ax_reset_view, "Reset View")
         self.btn_reset_view.on_clicked(self.reset_view)
 
         # Isometric view button
         ax_iso = plt.axes(
-            (button_left + button_spacing, 0.10, button_width, button_height)
+            (button_left + button_spacing, 0.12, button_width, button_height)
         )
         self.btn_iso = Button(ax_iso, "Isometric")
         self.btn_iso.on_clicked(self.isometric_view)
 
         # Direction radio buttons
-        ax_direction = plt.axes((0.85, 0.02, 0.12, 0.08))
+        ax_direction = plt.axes((0.82, 0.02, 0.1, 0.06))
         self.radio_direction = RadioButtons(ax_direction, ("vertical", "horizontal"))
         self.radio_direction.on_clicked(self.update_direction)
 
@@ -561,6 +596,37 @@ class AdvancedRippleLineViewer:
         self.generate_pattern()
         self.fig.canvas.draw()
 
+    def update_svg_width(self, text):
+        """Update SVG export width parameter."""
+        try:
+            width = float(text)
+            if width > 0 and width <= 100:  # Reasonable max limit
+                self.svg_params["width"] = width
+            else:
+                self.text_svg_width.set_val(str(self.svg_params["width"]))
+        except ValueError:
+            # Reset to current value if invalid input
+            self.text_svg_width.set_val(str(self.svg_params["width"]))
+
+    def update_svg_height(self, text):
+        """Update SVG export height parameter."""
+        try:
+            height = float(text)
+            if height > 0 and height <= 100:  # Reasonable max limit
+                self.svg_params["height"] = height
+            else:
+                self.text_svg_height.set_val(str(self.svg_params["height"]))
+        except ValueError:
+            # Reset to current value if invalid input
+            self.text_svg_height.set_val(str(self.svg_params["height"]))
+
+    def update_svg_units(self, label):
+        """Update SVG export units parameter."""
+        self.svg_params["units"] = label
+        # Update the text fields to reflect current values in new units
+        self.text_svg_width.set_val(str(self.svg_params["width"]))
+        self.text_svg_height.set_val(str(self.svg_params["height"]))
+
     def reset_view(self, event):
         """Reset the 3D view to default."""
         self.ax_3d.view_init(elev=20, azim=-60)  # type: ignore
@@ -571,44 +637,33 @@ class AdvancedRippleLineViewer:
         self.ax_3d.view_init(elev=30, azim=45)  # type: ignore
         self.fig.canvas.draw()
 
-    def export_parameters(self, event):
-        """Export current parameters to JSON file."""
-        # Create config directory if it doesn't exist
-        config_dir = "config"
-        os.makedirs(config_dir, exist_ok=True)
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"ripple_pattern_{timestamp}.json"
-        filepath = os.path.join(config_dir, filename)
-
-        export_data = {
-            "params": self.params,
-            "current_ripple_params": self.current_ripple_params,
-            "ripple_list": self.ripple_list,
-            "selected_ripple_index": self.selected_ripple_index,
-            "export_timestamp": timestamp,
-        }
-
-        try:
-            with open(filepath, "w") as f:
-                json.dump(export_data, f, indent=2)
-            print(f"Parameters exported to: {filepath}")
-        except IOError as e:
-            print(f"Error exporting parameters: {e}")
-
     def export_svg(self, event):
-        """Export the 3D plot to SVG format."""
+        """Export the 3D plot to SVG format with user-specified dimensions."""
         # Create output directory
         output_dir = "svg_exports"
         os.makedirs(output_dir, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        svg_filename = f"ripple_pattern_{timestamp}.svg"
+        units_suffix = self.svg_params["units"]
+        width = self.svg_params["width"]
+        height = self.svg_params["height"]
+        units = self.svg_params["units"]
+        svg_filename = (
+            f"ripple_pattern_{timestamp}_{width:.1f}x{height:.1f}_{units}.svg"
+        )
         svg_path = os.path.join(output_dir, svg_filename)
 
         try:
-            # Create a new figure with just the 3D subplot
-            fig_export = plt.figure(figsize=(9, 12))
+            # Convert dimensions to inches for matplotlib
+            width_inches = self._convert_to_inches(
+                self.svg_params["width"], self.svg_params["units"]
+            )
+            height_inches = self._convert_to_inches(
+                self.svg_params["height"], self.svg_params["units"]
+            )
+
+            # Create a new figure with user-specified dimensions
+            fig_export = plt.figure(figsize=(width_inches, height_inches))
             fig_export.subplots_adjust(left=0, right=1, top=1, bottom=0)
             ax_export = fig_export.add_subplot(111, projection="3d")
 
@@ -645,7 +700,7 @@ class AdvancedRippleLineViewer:
             ax_export.yaxis.pane.set_edgecolor("none")  # type: ignore
             ax_export.zaxis.pane.set_edgecolor("none")  # type: ignore
 
-            # Save as SVG
+            # Save as SVG with specified dimensions
             fig_export.savefig(
                 svg_path,
                 format="svg",
@@ -653,10 +708,20 @@ class AdvancedRippleLineViewer:
                 bbox_inches=None,
                 facecolor="white",
             )
-            print(f"SVG exported to: {svg_path}")
 
         except (IOError, OSError, RuntimeError) as e:
             print(f"Error exporting SVG: {e}")
+
+    def _convert_to_inches(self, value: float, units: str) -> float:
+        """Convert dimension value to inches for matplotlib."""
+        if units == "inches":
+            return value
+        elif units == "mm":
+            return value / 25.4
+        elif units == "cm":
+            return value / 2.54
+        else:
+            return value  # Default to inches
 
     def show(self):
         """Show the interactive plot."""
