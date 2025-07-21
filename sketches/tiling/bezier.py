@@ -1,4 +1,11 @@
+#!/usr/bin/env python3
+"""
+Bezier Truchet tiles. Created by Reinder Nijhoff 2019 - @reindernijhoff
+Ported to vsketch with numpy optimizations
+"""
+
 import vsketch
+import numpy as np
 import math
 import random
 
@@ -16,10 +23,9 @@ class Polygon:
         self.cp.extend(points)
 
         if self.cp:
-            xs = [p[0] for p in self.cp]
-            ys = [p[1] for p in self.cp]
-            xmin, xmax = min(xs), max(xs)
-            ymin, ymax = min(ys), max(ys)
+            points_array = np.array(self.cp)
+            xmin, ymin = np.min(points_array, axis=0)
+            xmax, ymax = np.max(points_array, axis=0)
             self.aabb = [
                 (xmin + xmax) / 2,
                 (ymin + ymax) / 2,
@@ -83,23 +89,23 @@ class Polygon:
             else:
                 intersections.extend([ls0, ls1])
 
-                # Order intersection points on line
-                cmpx = ls1[0] - ls0[0]
-                cmpy = ls1[1] - ls0[1]
+                # Order intersection points on line using numpy
+                ls0_arr = np.array(ls0)
+                ls1_arr = np.array(ls1)
+                direction = ls1_arr - ls0_arr
+
                 intersections.sort(
-                    key=lambda a: (a[0] - ls0[0]) * cmpx + (a[1] - ls0[1]) * cmpy
+                    key=lambda a: np.dot(np.array(a) - ls0_arr, direction)
                 )
 
                 for j in range(len(intersections) - 1):
-                    dist_sq = (intersections[j][0] - intersections[j + 1][0]) ** 2 + (
-                        intersections[j][1] - intersections[j + 1][1]
-                    ) ** 2
+                    p1_arr = np.array(intersections[j])
+                    p2_arr = np.array(intersections[j + 1])
+                    dist_sq = np.sum((p1_arr - p2_arr) ** 2)
+
                     if dist_sq >= 0.001:
-                        mid_point = (
-                            (intersections[j][0] + intersections[j + 1][0]) / 2,
-                            (intersections[j][1] + intersections[j + 1][1]) / 2,
-                        )
-                        if diff == (not p.inside(mid_point)):
+                        mid_point = (p1_arr + p2_arr) / 2
+                        if diff == (not p.inside(tuple(mid_point))):
                             ndp.extend([intersections[j], intersections[j + 1]])
 
         self.dp = ndp
@@ -107,26 +113,28 @@ class Polygon:
 
     def segment_intersect(self, l1p1, l1p2, l2p1, l2p2):
         """Check if two line segments intersect and return intersection point"""
-        d = (l2p2[1] - l2p1[1]) * (l1p2[0] - l1p1[0]) - (l2p2[0] - l2p1[0]) * (
-            l1p2[1] - l1p1[1]
-        )
-        if d == 0:
+        l1p1_arr = np.array(l1p1)
+        l1p2_arr = np.array(l1p2)
+        l2p1_arr = np.array(l2p1)
+        l2p2_arr = np.array(l2p2)
+
+        l1_dir = l1p2_arr - l1p1_arr
+        l2_dir = l2p2_arr - l2p1_arr
+
+        # Cross product for 2D vectors
+        d = l2_dir[1] * l1_dir[0] - l2_dir[0] * l1_dir[1]
+        if abs(d) < 1e-10:  # Parallel lines
             return False
 
-        n_a = (l2p2[0] - l2p1[0]) * (l1p1[1] - l2p1[1]) - (l2p2[1] - l2p1[1]) * (
-            l1p1[0] - l2p1[0]
-        )
-        n_b = (l1p2[0] - l1p1[0]) * (l1p1[1] - l2p1[1]) - (l1p2[1] - l1p1[1]) * (
-            l1p1[0] - l2p1[0]
-        )
+        diff = l1p1_arr - l2p1_arr
+        n_a = l2_dir[0] * diff[1] - l2_dir[1] * diff[0]
+        n_b = l1_dir[0] * diff[1] - l1_dir[1] * diff[0]
         ua = n_a / d
         ub = n_b / d
 
         if 0 <= ua <= 1 and 0 <= ub <= 1:
-            return (
-                l1p1[0] + ua * (l1p2[0] - l1p1[0]),
-                l1p1[1] + ua * (l1p2[1] - l1p1[1]),
-            )
+            intersection = l1p1_arr + ua * l1_dir
+            return tuple(intersection)
         return False
 
 
@@ -140,9 +148,24 @@ class Polygons:
         """Create a new polygon"""
         return Polygon()
 
+    # def draw(self, vsk, polygon, add_to_vis_list=True):
+    #     """Draw polygon with clipping against existing polygons"""
+    #     for p in self.polygon_list:
+    #         if not polygon.boolean(p):
+    #             break
+
+    #     polygon.draw(vsk)
+    #     if add_to_vis_list:
+    #         self.polygon_list.append(polygon)
+
     def draw(self, vsk, polygon, add_to_vis_list=True):
-        """Draw polygon with clipping against existing polygons"""
-        for p in self.polygon_list:
+        # Simple spatial culling instead of expensive boolean ops
+        if len(self.polygon_list) > 100:  # Only check recent polygons
+            recent_polys = self.polygon_list[-100:]
+        else:
+            recent_polys = self.polygon_list
+
+        for p in recent_polys:
             if not polygon.boolean(p):
                 break
 
@@ -151,113 +174,98 @@ class Polygons:
             self.polygon_list.append(polygon)
 
 
-def vec2_add(a, b):
-    """Add two 2D vectors"""
-    return (a[0] + b[0], a[1] + b[1])
-
-
-def vec2_sub(a, b):
-    """Subtract two 2D vectors"""
-    return (a[0] - b[0], a[1] - b[1])
-
-
-def vec2_scale(a, s):
-    """Scale a 2D vector"""
-    return (a[0] * s, a[1] * s)
-
-
-def vec2_distance(a, b):
-    """Calculate distance between two points"""
-    return math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
-
-
 def bezier_point(p0, p1, p2, p3, t):
-    """Calculate point on cubic Bezier curve at parameter t"""
+    """Calculate point on cubic Bezier curve at parameter t using numpy"""
+    p0_arr = np.array(p0)
+    p1_arr = np.array(p1)
+    p2_arr = np.array(p2)
+    p3_arr = np.array(p3)
+
     k = 1 - t
-    return (
-        k * k * k * p0[0]
-        + 3 * k * k * t * p1[0]
-        + 3 * k * t * t * p2[0]
-        + t * t * t * p3[0],
-        k * k * k * p0[1]
-        + 3 * k * k * t * p1[1]
-        + 3 * k * t * t * p2[1]
-        + t * t * t * p3[1],
+    result = (
+        k**3 * p0_arr + 3 * k**2 * t * p1_arr + 3 * k * t**2 * p2_arr + t**3 * p3_arr
     )
+    return tuple(result)
 
 
 def generate_tile(x, y, tile_type):
     """Generate tile configuration based on type"""
     if tile_type == 0:  # Quad
         return {
-            "center": (x, y),
+            "center": np.array([x, y]),
             "lineWidth": 1,
             "points": [
-                ((0, 0.5), (0, -1)),
-                ((0, -0.5), (0, 1)),
-                ((0.5, 0), (-1, 0)),
-                ((-0.5, 0), (1, 0)),
+                (np.array([0, 0.5]), np.array([0, -1])),
+                (np.array([0, -0.5]), np.array([0, 1])),
+                (np.array([0.5, 0]), np.array([-1, 0])),
+                (np.array([-0.5, 0]), np.array([1, 0])),
             ],
         }
     elif tile_type == 1:  # Double Quad
         return {
-            "center": (x, y),
+            "center": np.array([x, y]),
             "lineWidth": 0.5,
             "points": [
-                ((0.25, 0.5), (0, -1)),
-                ((0.25, -0.5), (0, 1)),
-                ((0.5, 0.25), (-1, 0)),
-                ((-0.5, 0.25), (1, 0)),
-                ((-0.25, 0.5), (0, -1)),
-                ((-0.25, -0.5), (0, 1)),
-                ((0.5, -0.25), (-1, 0)),
-                ((-0.5, -0.25), (1, 0)),
+                (np.array([0.25, 0.5]), np.array([0, -1])),
+                (np.array([0.25, -0.5]), np.array([0, 1])),
+                (np.array([0.5, 0.25]), np.array([-1, 0])),
+                (np.array([-0.5, 0.25]), np.array([1, 0])),
+                (np.array([-0.25, 0.5]), np.array([0, -1])),
+                (np.array([-0.25, -0.5]), np.array([0, 1])),
+                (np.array([0.5, -0.25]), np.array([-1, 0])),
+                (np.array([-0.5, -0.25]), np.array([1, 0])),
             ],
         }
     elif tile_type == 2:  # Double Quad - Brick layout
+        center_x = x + (0.5 if y % 2 == 0 else 0)
         return {
-            "center": (x + (0.5 if y % 2 == 0 else 0), y),
+            "center": np.array([center_x, y]),
             "lineWidth": 0.5,
             "points": [
-                ((0.25, 0.5), (0, -1)),
-                ((0.25, -0.5), (0, 1)),
-                ((0.5, 0.25), (-1, 0)),
-                ((-0.5, 0.25), (1, 0)),
-                ((-0.25, 0.5), (0, -1)),
-                ((-0.25, -0.5), (0, 1)),
-                ((0.5, -0.25), (-1, 0)),
-                ((-0.5, -0.25), (1, 0)),
+                (np.array([0.25, 0.5]), np.array([0, -1])),
+                (np.array([0.25, -0.5]), np.array([0, 1])),
+                (np.array([0.5, 0.25]), np.array([-1, 0])),
+                (np.array([-0.5, 0.25]), np.array([1, 0])),
+                (np.array([-0.25, 0.5]), np.array([0, -1])),
+                (np.array([-0.25, -0.5]), np.array([0, 1])),
+                (np.array([0.5, -0.25]), np.array([-1, 0])),
+                (np.array([-0.5, -0.25]), np.array([1, 0])),
             ],
         }
     elif tile_type == 3:  # Double Triangle
         h = math.sqrt(3) / 4
         points = [
-            ((-0.25, -h), (0, 1)),
-            ((0.25, -h), (0, 1)),
-            ((-1 / 3, -h / 3), (2 * h, -0.5)),
-            ((-1 / 6, h / 3), (2 * h, -0.5)),
-            ((1 / 3, -h / 3), (-2 * h, -0.5)),
-            ((1 / 6, h / 3), (-2 * h, -0.5)),
+            (np.array([-0.25, -h]), np.array([0, 1])),
+            (np.array([0.25, -h]), np.array([0, 1])),
+            (np.array([-1 / 3, -h / 3]), np.array([2 * h, -0.5])),
+            (np.array([-1 / 6, h / 3]), np.array([2 * h, -0.5])),
+            (np.array([1 / 3, -h / 3]), np.array([-2 * h, -0.5])),
+            (np.array([1 / 6, h / 3]), np.array([-2 * h, -0.5])),
         ]
         if x % 2 != 0:
-            points = [((p[0][0], -p[0][1]), (p[1][0], -p[1][1])) for p in points]
+            points = [
+                (np.array([p[0][0], -p[0][1]]), np.array([p[1][0], -p[1][1]]))
+                for p in points
+            ]
         return {
-            "center": (x * 0.5 + (0.5 if y % 2 == 0 else 0), y * h * 2),
+            "center": np.array([x * 0.5 + (0.5 if y % 2 == 0 else 0), y * h * 2]),
             "lineWidth": 0.35,
             "points": points,
         }
     elif tile_type == 4:  # Hexagon
         h = math.sqrt(3) / 4
+        center_x = x * 0.75
+        center_y = y * 2 * h + (0 if x % 2 != 0 else h)
         return {
-            "center": (x * 0.75, y * 2 * h + (0 if x % 2 != 0 else h)),
+            "center": np.array([center_x, center_y]),
             "lineWidth": 0.6,
             "points": [
-                ((0, -h), (0, 1)),
-                ((0, h), (0, -1)),
-                ((-3 / 8, -h / 2), (2 * h, 0.5)),
-                ((-3 / 8, h / 2), (2 * h, -0.5)),
-                ((3 / 8, -h / 2), (-2 * h, 0.5)),
-                ((3 / 8, h / 2), (-2 * h, -0.5)),
+                (np.array([0, -h]), np.array([0, 1])),
+                (np.array([0, h]), np.array([0, -1])),
+                (np.array([-3 / 8, -h / 2]), np.array([2 * h, 0.5])),
+                (np.array([-3 / 8, h / 2]), np.array([2 * h, -0.5])),
+                (np.array([3 / 8, -h / 2]), np.array([-2 * h, 0.5])),
+                (np.array([3 / 8, h / 2]), np.array([-2 * h, -0.5])),
             ],
         }
 
@@ -281,25 +289,33 @@ def add_bezier(
 
     # Transform function
     def ts(p):
-        return (scale * (p[0] + tile_center[0]), scale * (p[1] + tile_center[1]))
+        transformed = scale * (p + tile_center)
+        return tuple(transformed)
 
     # Scale distance based on x position and gradient
-    dist0 = dist * (ts(p0)[0] / 200 * -line_w_gradient + 1 - 0.5 * abs(line_w_gradient))
-    dist1 = dist * (ts(p1)[0] / 200 * -line_w_gradient + 1 - 0.5 * abs(line_w_gradient))
+    ts_p0 = ts(p0)
+    ts_p1 = ts(p1)
+    dist0 = dist * (ts_p0[0] / 200 * -line_w_gradient + 1 - 0.5 * abs(line_w_gradient))
+    dist1 = dist * (ts_p1[0] / 200 * -line_w_gradient + 1 - 0.5 * abs(line_w_gradient))
 
-    # Calculate start, end and control points
-    sp = vec2_sub(p0, vec2_scale((d0[1], -d0[0]), dist0))
-    ep = vec2_add(p1, vec2_scale((d1[1], -d1[0]), dist1))
-    curve = curviness * (vec2_distance(sp, ep) ** (2 / 3)) * line_width
-    sc = vec2_add(sp, vec2_scale(d0, curve))
-    ec = vec2_add(ep, vec2_scale(d1, curve))
+    # Calculate start, end and control points using numpy
+    perpendicular_d0 = np.array([d0[1], -d0[0]])
+    perpendicular_d1 = np.array([d1[1], -d1[0]])
+
+    sp = p0 - perpendicular_d0 * dist0
+    ep = p1 + perpendicular_d1 * dist1
+
+    curve_strength = curviness * (np.linalg.norm(sp - ep) ** (2 / 3)) * line_width
+    sc = sp + d0 * curve_strength
+    ec = ep + d1 * curve_strength
 
     # Generate points along the curve
     points = []
     steps = 10
     for i in range(steps + 1):
         t = i / steps
-        points.append(ts(bezier_point(sp, sc, ec, ep, t)))
+        point = bezier_point(sp, sc, ec, ep, t)
+        points.append(ts(np.array(point)))
 
     if as_edge:
         polygon.add_points(*points)
@@ -313,10 +329,8 @@ def draw_tile(
 ):
     """Draw a single tile"""
     # Early discard if outside visible area
-    if (
-        abs(scale * tile["center"][0]) > 100 + scale
-        or abs(scale * tile["center"][1]) > 100 + scale
-    ):
+    center = tile["center"]
+    if abs(scale * center[0]) > 100 + scale or abs(scale * center[1]) > 100 + scale:
         return
 
     lw = line_width * tile["lineWidth"]
@@ -334,10 +348,10 @@ def draw_tile(
         # Add main bezier curves
         add_bezier(
             polygon,
-            s[0],
-            s[1],
-            e[0],
-            e[1],
+            s[0],  # position
+            s[1],  # direction
+            e[0],  # position
+            e[1],  # direction
             lw,
             tile["center"],
             tile["lineWidth"],
@@ -387,10 +401,11 @@ class BezierTruchetSketch(vsketch.SketchClass):
 
     Creates complex Truchet patterns using Bezier curves with various tile types
     including quad, double quad, triangular, and hexagonal patterns.
+    Optimized with numpy for better performance.
     """
 
     # Configuration parameters
-    scale = vsketch.Param(12, min_value=1, max_value=50, step=1)
+    scale = vsketch.Param(50, min_value=25, max_value=200, step=1)
     tile_type = vsketch.Param(
         1,
         min_value=0,
@@ -411,7 +426,7 @@ class BezierTruchetSketch(vsketch.SketchClass):
 
     def draw(self, vsk: vsketch.Vsketch) -> None:
         # Set up the sketch
-        vsk.size("9in", "12in")
+        vsk.size("10in", "10in")
         vsk.scale("mm")
         vsk.stroke(1)
         vsk.strokeWeight(1)
