@@ -4,10 +4,12 @@ Bezier Truchet tiles. Created by Reinder Nijhoff 2019 - @reindernijhoff
 Ported to vsketch with numpy optimizations
 """
 
+import pint
 import vsketch
 import numpy as np
 import math
 import random
+from enum import Enum
 
 
 class Polygon:
@@ -190,7 +192,7 @@ def bezier_point(p0, p1, p2, p3, t):
 
 def generate_tile(x, y, tile_type):
     """Generate tile configuration based on type"""
-    if tile_type == 0:  # Quad
+    if tile_type == TileType.QUAD:
         return {
             "center": np.array([x, y]),
             "lineWidth": 1,
@@ -201,7 +203,7 @@ def generate_tile(x, y, tile_type):
                 (np.array([-0.5, 0]), np.array([1, 0])),
             ],
         }
-    elif tile_type == 1:  # Double Quad
+    elif tile_type == TileType.DOUBLE_QUAD:
         return {
             "center": np.array([x, y]),
             "lineWidth": 0.5,
@@ -216,7 +218,7 @@ def generate_tile(x, y, tile_type):
                 (np.array([-0.5, -0.25]), np.array([1, 0])),
             ],
         }
-    elif tile_type == 2:  # Double Quad - Brick layout
+    elif tile_type == TileType.BRICK:
         center_x = x + (0.5 if y % 2 == 0 else 0)
         return {
             "center": np.array([center_x, y]),
@@ -232,7 +234,7 @@ def generate_tile(x, y, tile_type):
                 (np.array([-0.5, -0.25]), np.array([1, 0])),
             ],
         }
-    elif tile_type == 3:  # Double Triangle
+    elif tile_type == TileType.DOUBLE_TRIANGLE:
         h = math.sqrt(3) / 4
         points = [
             (np.array([-0.25, -h]), np.array([0, 1])),
@@ -252,7 +254,7 @@ def generate_tile(x, y, tile_type):
             "lineWidth": 0.35,
             "points": points,
         }
-    elif tile_type == 4:  # Hexagon
+    elif tile_type == TileType.HEXAGON:  # Hexagon
         h = math.sqrt(3) / 4
         center_x = x * 0.75
         center_y = y * 2 * h + (0 if x % 2 != 0 else h)
@@ -395,6 +397,14 @@ def draw_tile(
         polys.draw(vsk, polygon)
 
 
+class TileType(Enum):
+    QUAD = (0,)
+    DOUBLE_QUAD = (1,)
+    BRICK = (2,)
+    DOUBLE_TRIANGLE = (3,)
+    HEXAGON = 4
+
+
 class BezierTruchetSketch(vsketch.SketchClass):
     """
     Bezier Truchet tiles sketch for vsketch.
@@ -405,19 +415,14 @@ class BezierTruchetSketch(vsketch.SketchClass):
     """
 
     # Configuration parameters
-    scale = vsketch.Param(50, min_value=25, max_value=200, step=1)
+    layout_width = vsketch.Param(9, min_value=1, max_value=20, step=1)
+    layout_height = vsketch.Param(12, min_value=1, max_value=20, step=1)
+    num_tiles_width = vsketch.Param(2, min_value=1, max_value=200, step=1)
+    num_tiles_height = vsketch.Param(2, min_value=1, max_value=200, step=1)
+    zoom = vsketch.Param(25, min_value=1, max_value=200, step=1)
     tile_type = vsketch.Param(
-        1,
-        min_value=0,
-        max_value=4,
-        step=1,
-        choices=[
-            0,
-            1,
-            2,
-            3,
-            4,
-        ],  # Quad, Double Quad, Double Quad/Brick, Double Triangle, Hexagon
+        TileType.DOUBLE_QUAD.name,
+        choices=[opt.name for opt in TileType],
     )
     line_width = vsketch.Param(0.4, min_value=0.1, max_value=2.0, step=0.1)
     curviness = vsketch.Param(0.95, min_value=0.0, max_value=1.0, step=0.05)
@@ -425,36 +430,37 @@ class BezierTruchetSketch(vsketch.SketchClass):
     line_w_gradient = vsketch.Param(0.0, min_value=-1.0, max_value=1.0, step=0.1)
 
     def draw(self, vsk: vsketch.Vsketch) -> None:
-        # Set up the sketch
-        vsk.size("10in", "10in")
+        ureg = pint.UnitRegistry()
+        vsk.size(f"{self.layout_width}in", f"{self.layout_height}in")
         vsk.scale("mm")
         vsk.stroke(1)
         vsk.strokeWeight(1)
 
         # Set random seed for reproducible results
         vsk.randomSeed(42)
-        random.seed(42)
 
         # Create polygons container
         polys = Polygons()
 
-        # Calculate grid size
-        s = int(200 / self.scale) + 2
-
         # Center the drawing
-        vsk.translate(148.5, 148.5)  # Center on 10in x 10in (297mm x 297mm)
+        layout_width_mm = (self.layout_width * ureg.inch).to("mm").magnitude
+        layout_height_mm = (self.layout_height * ureg.inch).to("mm").magnitude
+        vsk.translate(
+            layout_width_mm,
+            layout_height_mm,
+        )
 
         # Draw tiles
-        for i in range(s * s * 4):
-            y = i // (s * 2) - s
-            x = (i % (s * 2)) - s
+        for i in range(self.num_tiles_height * self.num_tiles_width * 4):
+            y = i // (self.num_tiles_width * 2) - self.num_tiles_width
+            x = (i % (self.num_tiles_width * 2)) - self.num_tiles_height
 
-            tile = generate_tile(x, y, self.tile_type)
+            tile = generate_tile(x, y, TileType[self.tile_type])
             draw_tile(
                 vsk,
                 tile,
                 polys,
-                self.scale,
+                self.zoom,
                 self.line_width,
                 self.inner_lines,
                 self.line_w_gradient,
