@@ -4,23 +4,23 @@ Bezier Truchet tiles. Created by Reinder Nijhoff 2019 - @reindernijhoff
 Ported to vsketch with numpy optimizations
 """
 
-import pint
 import vsketch
 import numpy as np
 import math
 import random
 from enum import Enum
+from typing import List, Tuple, Dict, Any, Union
 
 
 class Polygon:
     """Polygon class for clipping operations"""
 
-    def __init__(self):
-        self.cp = []  # clip path: array of (x,y) pairs
-        self.dp = []  # 2d lines [(x0,y0), (x1,y1)] to draw
-        self.aabb = []  # AABB bounding box
+    def __init__(self) -> None:
+        self.cp: List[Tuple[float, float]] = []  # clip path: array of (x,y) pairs
+        self.dp: List[Tuple[float, float]] = []  # 2d lines [(x0,y0), (x1,y1)] to draw
+        self.aabb: List[float] = []  # AABB bounding box
 
-    def add_points(self, *points):
+    def add_points(self, *points: Tuple[float, float]) -> None:
         """Add points to clip path and update bounding box"""
         self.cp.extend(points)
 
@@ -35,31 +35,32 @@ class Polygon:
                 (ymax - ymin) / 2,
             ]
 
-    def add_segments(self, *points):
+    def add_segments(self, *points: Tuple[float, float]) -> None:
         """Add segments (pairs of points)"""
         self.dp.extend(points)
 
-    def add_outline(self):
+    def add_outline(self) -> None:
         """Add outline segments from clip path"""
         for i in range(len(self.cp)):
             self.dp.extend([self.cp[i], self.cp[(i + 1) % len(self.cp)]])
 
-    def draw(self, vsk):
+    def draw(self, vsk: vsketch.Vsketch) -> None:
         """Draw the polygon using vsketch"""
         for i in range(0, len(self.dp), 2):
             vsk.line(self.dp[i][0], self.dp[i][1], self.dp[i + 1][0], self.dp[i + 1][1])
 
-    def inside(self, p):
+    def inside(self, p: Tuple[float, float]) -> bool:
         """Check if point p is inside the polygon"""
-        intersections = 0
-        for i in range(len(self.cp)):
+        intersections = sum(
+            1
+            for i in range(len(self.cp))
             if self.segment_intersect(
                 p, (0.1, -1000), self.cp[i], self.cp[(i + 1) % len(self.cp)]
-            ):
-                intersections += 1
-        return intersections & 1
+            )
+        )
+        return intersections % 2 == 1
 
-    def boolean(self, p, diff=True):
+    def boolean(self, p: "Polygon", diff: bool = True) -> bool:
         """Boolean operation with polygon p"""
         # Bounding box optimization
         if len(p.aabb) >= 4 and len(self.aabb) >= 4:
@@ -113,7 +114,13 @@ class Polygon:
         self.dp = ndp
         return len(self.dp) > 0
 
-    def segment_intersect(self, l1p1, l1p2, l2p1, l2p2):
+    def segment_intersect(
+        self,
+        l1p1: Tuple[float, float],
+        l1p2: Tuple[float, float],
+        l2p1: Tuple[float, float],
+        l2p2: Tuple[float, float],
+    ) -> Union[Tuple[float, float], bool]:
         """Check if two line segments intersect and return intersection point"""
         l1p1_arr = np.array(l1p1)
         l1p2_arr = np.array(l1p2)
@@ -143,10 +150,10 @@ class Polygon:
 class Polygons:
     """Container for managing multiple polygons"""
 
-    def __init__(self):
-        self.polygon_list = []
+    def __init__(self) -> None:
+        self.polygon_list: List[Polygon] = []
 
-    def create(self):
+    def create(self) -> Polygon:
         """Create a new polygon"""
         return Polygon()
 
@@ -160,7 +167,9 @@ class Polygons:
     #     if add_to_vis_list:
     #         self.polygon_list.append(polygon)
 
-    def draw(self, vsk, polygon, add_to_vis_list=True):
+    def draw(
+        self, vsk: vsketch.Vsketch, polygon: Polygon, add_to_vis_list: bool = True
+    ) -> None:
         # Simple spatial culling instead of expensive boolean ops
         if len(self.polygon_list) > 100:  # Only check recent polygons
             recent_polys = self.polygon_list[-100:]
@@ -176,7 +185,13 @@ class Polygons:
             self.polygon_list.append(polygon)
 
 
-def bezier_point(p0, p1, p2, p3, t):
+def bezier_point(
+    p0: Union[Tuple[float, float], np.ndarray],
+    p1: Union[Tuple[float, float], np.ndarray],
+    p2: Union[Tuple[float, float], np.ndarray],
+    p3: Union[Tuple[float, float], np.ndarray],
+    t: float,
+) -> Tuple[float, float]:
     """Calculate point on cubic Bezier curve at parameter t using numpy"""
     p0_arr = np.array(p0)
     p1_arr = np.array(p1)
@@ -190,7 +205,7 @@ def bezier_point(p0, p1, p2, p3, t):
     return tuple(result)
 
 
-def generate_tile(x, y, tile_type):
+def generate_tile(x: int, y: int, tile_type: "TileType") -> Dict[str, Any]:
     """Generate tile configuration based on type"""
     if tile_type == TileType.QUAD:
         return {
@@ -273,24 +288,24 @@ def generate_tile(x, y, tile_type):
 
 
 def add_bezier(
-    polygon,
-    p0,
-    d0,
-    p1,
-    d1,
-    dist,
-    tile_center,
-    line_width,
-    scale,
-    line_w_gradient,
-    curviness,
-    as_edge=True,
-    as_line=True,
-):
+    polygon: Polygon,
+    p0: np.ndarray,
+    d0: np.ndarray,
+    p1: np.ndarray,
+    d1: np.ndarray,
+    dist: float,
+    tile_center: np.ndarray,
+    line_width: float,
+    scale: float,
+    line_w_gradient: float,
+    curviness: float,
+    as_edge: bool = True,
+    as_line: bool = True,
+) -> None:
     """Add a Bezier curve to polygon"""
 
     # Transform function
-    def ts(p):
+    def ts(p: np.ndarray) -> Tuple[float, float]:
         transformed = scale * (p + tile_center)
         return tuple(transformed)
 
@@ -327,8 +342,15 @@ def add_bezier(
 
 
 def draw_tile(
-    vsk, tile, polys, scale, line_width, inner_lines, line_w_gradient, curviness
-):
+    vsk: vsketch.Vsketch,
+    tile: Dict[str, Any],
+    polys: Polygons,
+    scale: float,
+    line_width: float,
+    inner_lines: int,
+    line_w_gradient: float,
+    curviness: float,
+) -> None:
     """Draw a single tile"""
     # Early discard if outside visible area
     center = tile["center"]
@@ -430,7 +452,6 @@ class BezierTruchetSketch(vsketch.SketchClass):
     line_w_gradient = vsketch.Param(0.0, min_value=-1.0, max_value=1.0, step=0.1)
 
     def draw(self, vsk: vsketch.Vsketch) -> None:
-        ureg = pint.UnitRegistry()
         vsk.size(f"{self.layout_width}in", f"{self.layout_height}in")
         vsk.scale("mm")
         vsk.stroke(1)
@@ -443,8 +464,8 @@ class BezierTruchetSketch(vsketch.SketchClass):
         polys = Polygons()
 
         # Center the drawing
-        layout_width_mm = (self.layout_width * ureg.inch).to("mm").magnitude
-        layout_height_mm = (self.layout_height * ureg.inch).to("mm").magnitude
+        layout_width_mm = self.layout_width * 25.4  # Convert inches to mm
+        layout_height_mm = self.layout_height * 25.4  # Convert inches to mm
         vsk.translate(
             layout_width_mm,
             layout_height_mm,
