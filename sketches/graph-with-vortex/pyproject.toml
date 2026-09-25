@@ -1,0 +1,11 @@
+[project]
+name = "plotter-graph-with-vortex"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.5.3",
+    "pyside6<6.10",
+    "vsketch>=1.2.0",
+]
