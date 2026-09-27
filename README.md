@@ -33,7 +33,7 @@ To install everything at once: `uv sync --all-packages`.
 ## Adding a sketch
 
 ```sh
-uv init --app --no-workspace sketches/<name>   # or copy an existing sketch
+uv init --app sketches/<name>   # or copy an existing sketch
 cd sketches/<name> && uv add vsketch numpy "pyside6<6.10"
 ```
 
