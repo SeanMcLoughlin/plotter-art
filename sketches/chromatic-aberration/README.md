@@ -39,3 +39,15 @@ time. Where all three overlap you get a near-black line.
 | `rotate_split`, `scale_split` | Extra per-layer rotation/scale split, also ramped           |
 | `show_hidden`              | Draw the back edges too                                        |
 | `color_1..3`, `pen_width`  | Pen preview colors and width                                   |
+
+## Exporting per-pen SVGs
+
+`vsk save` writes one SVG with each pen as an Inkscape layer. To split it into
+one file per pen (every file keeps the full page size, so they stay aligned):
+
+```sh
+uv run vpype read output/main_s1.svg forlayer write "output/main_s1_layer%_lid%.svg" end
+```
+
+This gives `…_layer1.svg` (yellow), `…_layer2.svg` (magenta) and `…_layer3.svg`
+(cyan). Plot them in that order, light to dark, without moving the paper.
