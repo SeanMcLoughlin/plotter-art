@@ -1,7 +1,7 @@
 [
   {
     "label": "Run bezier",
-    "command": "source .venv/bin/activate.fish && vsk run bezier.py",
+    "command": "uv run vsk run bezier.py",
     "use_new_terminal": false,
     "allow_concurrent_runs": false,
     "reveal": "always",
