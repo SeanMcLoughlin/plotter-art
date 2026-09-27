@@ -15,6 +15,7 @@ Run with:  uv run vsk run main.py
 import math
 
 import numpy as np
+import vpype as vp
 import vsketch
 
 PAGE_SIZES = ["9inx12in", "a4", "a3", "letter", "11inx14in"]
@@ -112,13 +113,15 @@ class ChromaticCubesSketch(vsketch.SketchClass):
                     for a, b in edges:
                         vsk.line(ox + a[0], oy + a[1], ox + b[0], oy + b[1])
 
+        # Set colors here rather than in finalize(): the `vsk run` viewer
+        # only runs finalize() on save, but it does honor layer metadata.
+        colors = (self.color_1, self.color_2, self.color_3)
+        for lid, layer in vsk.document.layers.items():
+            if 1 <= lid <= len(colors):
+                layer.set_property(vp.METADATA_FIELD_COLOR, vp.Color(colors[lid - 1]))
+
     def finalize(self, vsk: vsketch.Vsketch) -> None:
-        vsk.vpype(
-            "linemerge linesimplify reloop linesort "
-            f"color -l 1 {self.color_1} "
-            f"color -l 2 {self.color_2} "
-            f"color -l 3 {self.color_3}"
-        )
+        vsk.vpype("linemerge linesimplify reloop linesort")
 
     # ------------------------------------------------------------------
     # Cube geometry
