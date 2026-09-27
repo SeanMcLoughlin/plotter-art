@@ -341,6 +341,35 @@ def add_bezier(
             polygon.add_segments(points[i], points[i + 1])
 
 
+def draw_bounding_box(
+    vsk: vsketch.Vsketch,
+    width: int,
+    height: int,
+    scale: float,
+) -> None:
+    """Draw a bounding box frame around the tile area"""
+    # Based on the tile positioning logic:
+    # x = (i % (width * 2)) - height, so x ranges from -height to (2*width-1-height)
+    # y = (i // (width * 2)) - width, so y ranges from -width to (2*height-1-width)
+
+    x_min = -height
+    x_max = 2 * width - 1 - height
+    y_min = -width
+    y_max = 2 * height - 1 - width
+
+    # Each tile extends ±0.5 from its center, so add 0.5 margin to the bounds
+    x1 = (x_min - 0.5) * scale
+    y1 = (y_min - 0.5) * scale
+    x2 = (x_max + 0.5) * scale
+    y2 = (y_max + 0.5) * scale
+
+    # Draw the frame
+    vsk.line(x1, y1, x2, y1)  # Top
+    vsk.line(x2, y1, x2, y2)  # Right
+    vsk.line(x2, y2, x1, y2)  # Bottom
+    vsk.line(x1, y2, x1, y1)  # Left
+
+
 def draw_tile(
     vsk: vsketch.Vsketch,
     tile: Dict[str, Any],
@@ -450,6 +479,7 @@ class BezierTruchetSketch(vsketch.SketchClass):
     curviness = vsketch.Param(0.95, min_value=0.0, max_value=1.0, step=0.05)
     inner_lines = vsketch.Param(2, min_value=0, max_value=9, step=1)
     line_w_gradient = vsketch.Param(0.0, min_value=-1.0, max_value=1.0, step=0.1)
+    show_bounding_box = vsketch.Param(True)
 
     def draw(self, vsk: vsketch.Vsketch) -> None:
         vsk.size(f"{self.layout_width}in", f"{self.layout_height}in")
@@ -486,6 +516,15 @@ class BezierTruchetSketch(vsketch.SketchClass):
                 self.inner_lines,
                 self.line_w_gradient,
                 self.curviness,
+            )
+
+        # Draw bounding box frame around the tiles
+        if self.show_bounding_box:
+            draw_bounding_box(
+                vsk,
+                self.num_tiles_width,
+                self.num_tiles_height,
+                self.zoom,
             )
 
     def finalize(self, vsk: vsketch.Vsketch) -> None:
