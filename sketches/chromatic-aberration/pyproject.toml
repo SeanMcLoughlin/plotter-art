@@ -1,0 +1,11 @@
+[project]
+name = "plotter-chromatic-aberration"
+version = "0.1.0"
+description = "Grid of wireframe cubes split into CMY layers, like chromatic aberration, for pen plotting"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.5.3",
+    "pyside6<6.10",
+    "vsketch>=1.2.0",
+]
