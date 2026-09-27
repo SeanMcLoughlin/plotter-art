@@ -1,0 +1,18 @@
+[project]
+name = "plotter-experiments"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "matplotlib>=3.10.3",
+    "moderngl>=5.12.0",
+    "noise>=1.2.2",
+    "numpy>=2.3.0",
+    "pygame>=2.6.1",
+    "pyglet>=2.1.6",
+    "pyrr>=0.10.3",
+    "scipy>=1.15.3",
+    "svgwrite>=1.4.3",
+    "vsketch>=1.1.0",
+]
