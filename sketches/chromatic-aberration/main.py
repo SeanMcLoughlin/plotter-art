@@ -18,7 +18,7 @@ import numpy as np
 import vpype as vp
 import vsketch
 
-PAGE_SIZES = ["9inx12in", "a4", "a3", "letter", "11inx14in"]
+PAGE_SIZES = ["9inx12in", "5.5inx8.5in", "a4", "a3", "letter", "11inx14in"]
 
 # Unit cube centered on the origin, y up, z toward the viewer.
 VERTS = np.array(
