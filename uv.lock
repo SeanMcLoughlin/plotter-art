@@ -5,11 +5,12 @@ requires-python = ">=3.12"
 [manifest]
 members = [
     "plotter-chromatic-aberration",
+    "plotter-experiments",
     "plotter-graph-with-vortex",
     "plotter-levi-to-scribble",
     "plotter-lindenmayer-system-botanical-test",
     "plotter-ripples",
-    "plotter-experiments",
+    "plotter-sphere-lattice",
     "plotter-tiling",
 ]
 
@@ -986,6 +987,37 @@ requires-dist = [
 ]
 
 [[package]]
+name = "plotter-experiments"
+version = "0.1.0"
+source = { virtual = "sketches/experiments" }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "moderngl" },
+    { name = "noise" },
+    { name = "numpy" },
+    { name = "pygame" },
+    { name = "pyglet" },
+    { name = "pyrr" },
+    { name = "scipy" },
+    { name = "svgwrite" },
+    { name = "vsketch" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "matplotlib", specifier = ">=3.10.3" },
+    { name = "moderngl", specifier = ">=5.12.0" },
+    { name = "noise", specifier = ">=1.2.2" },
+    { name = "numpy", specifier = ">=2.3.0" },
+    { name = "pygame", specifier = ">=2.6.1" },
+    { name = "pyglet", specifier = ">=2.1.6" },
+    { name = "pyrr", specifier = ">=0.10.3" },
+    { name = "scipy", specifier = ">=1.15.3" },
+    { name = "svgwrite", specifier = ">=1.4.3" },
+    { name = "vsketch", specifier = ">=1.1.0" },
+]
+
+[[package]]
 name = "plotter-graph-with-vortex"
 version = "0.1.0"
 source = { virtual = "sketches/graph-with-vortex" }
@@ -1054,34 +1086,20 @@ requires-dist = [
 ]
 
 [[package]]
-name = "plotter-experiments"
+name = "plotter-sphere-lattice"
 version = "0.1.0"
-source = { virtual = "sketches/experiments" }
+source = { virtual = "sketches/sphere-lattice" }
 dependencies = [
-    { name = "matplotlib" },
-    { name = "moderngl" },
-    { name = "noise" },
     { name = "numpy" },
-    { name = "pygame" },
-    { name = "pyglet" },
-    { name = "pyrr" },
-    { name = "scipy" },
-    { name = "svgwrite" },
+    { name = "pyside6" },
     { name = "vsketch" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "matplotlib", specifier = ">=3.10.3" },
-    { name = "moderngl", specifier = ">=5.12.0" },
-    { name = "noise", specifier = ">=1.2.2" },
-    { name = "numpy", specifier = ">=2.3.0" },
-    { name = "pygame", specifier = ">=2.6.1" },
-    { name = "pyglet", specifier = ">=2.1.6" },
-    { name = "pyrr", specifier = ">=0.10.3" },
-    { name = "scipy", specifier = ">=1.15.3" },
-    { name = "svgwrite", specifier = ">=1.4.3" },
-    { name = "vsketch", specifier = ">=1.1.0" },
+    { name = "numpy", specifier = ">=2.5.3" },
+    { name = "pyside6", specifier = "<6.10" },
+    { name = "vsketch", specifier = ">=1.2.0" },
 ]
 
 [[package]]

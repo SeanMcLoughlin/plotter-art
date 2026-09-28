@@ -1,0 +1,11 @@
+[project]
+name = "plotter-sphere-lattice"
+version = "0.1.0"
+description = "Shaded tube-lattice sphere with hatch-depth or multi-pen tones, for pen plotting"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.5.3",
+    "pyside6<6.10",
+    "vsketch>=1.2.0",
+]
