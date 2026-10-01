@@ -1,0 +1,14 @@
+[project]
+name = "plotter-morel-illustration"
+version = "0.1.0"
+description = "Hatched pen-plotter rendering of a morel illustration, in four Stabilo pens"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.5.3",
+    "pillow>=10",
+    "pyside6<6.10",
+    "scikit-image>=0.25",
+    "scipy>=1.15",
+    "vsketch>=1.2.0",
+]
