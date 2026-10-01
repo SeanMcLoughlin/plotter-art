@@ -19,7 +19,8 @@ How it works:
   3. Evenly spaced streamlines (Jobard-Lefer style) along that direction, one
      set per pen, spaced so the pen covers its share of the area. Where a
      pen needs more ink than one set of lines gives, a second set of
-     straight lines crosses it.
+     straight lines crosses it. The tracing is compiled with numba, and the
+     eight line sets (two per pen) run in parallel on threads.
 
 Everything is cached in stages, so changing hatching settings doesn't redo
 the separation, and changing colours' preview or pen toggles doesn't redo
@@ -34,8 +35,10 @@ Layers (plot in this order, light to dark):
 Run with:  uv run vsk run main.py
 """
 
+import importlib
 import math
-from collections import deque
+import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -47,6 +50,11 @@ from scipy.optimize import nnls
 from skimage.measure import find_contours
 
 HERE = Path(__file__).parent
+sys.path.insert(0, str(HERE))
+import flowlines  # noqa: E402  (a real module, so numba can cache it)
+
+# `vsk run` reloads this file on save but not flowlines.py; pick up its edits too.
+importlib.reload(flowlines)
 PAGE_SIZES = ["9inx12in", "5.5inx8.5in", "a4", "a3", "letter", "11inx14in"]
 PENS = ["yellow", "light brown", "dark brown", "black"]
 LAYERS = (1, 2, 3, 4)
@@ -154,109 +162,6 @@ def separate(an: dict, pen_rgb: np.ndarray, white_pct: float, tone_gamma: float,
     # Extra ink only where a lot is needed (pits), leaving light areas alone.
     cov *= 1 + (density - 1) * _smoothstep(0.3, 0.8, cov.sum(-1, keepdims=True))
     return np.where(subject[..., None], cov, 0)
-
-
-# ----------------------------------------------------------------------
-# Evenly spaced streamlines (at working resolution)
-# ----------------------------------------------------------------------
-
-
-def _disk(r: int):
-    yy, xx = np.mgrid[-r:r + 1, -r:r + 1]
-    m = xx * xx + yy * yy <= r * r
-    return yy[m], xx[m]
-
-
-def streamlines(cov, ux, uy, rng, res, pen_w, s_min, s_max, stop, step_mm, min_len):
-    """Lines along the direction field (ux, uy), spaced so the pen's ink covers
-    `cov` of the area.
-
-    New lines start one spacing to the side of accepted ones (Jobard & Lefer),
-    falling back to random seeds. A line ends when it comes within `stop`
-    spacings of another line, leaves the active area, or turns too sharply.
-    Returns polylines in working-pixel (col, row) coordinates.
-    """
-    h, w = cov.shape
-    sep = (np.clip(pen_w / np.maximum(cov, 1e-6), s_min, s_max) / res).astype(np.float32)
-    active = cov >= pen_w / s_max
-    ys, xs = np.nonzero(active)
-    if len(ys) == 0:
-        return []
-    seed_block = np.zeros((h, w), bool)
-    stop_block = np.zeros((h, w), bool)
-    order = list(rng.permutation(len(ys))[: max(1, int(len(ys) * (res / s_min) ** 2 * 3))])
-    queue: deque = deque()
-    step = step_mm / res
-    lines = []
-
-    def seeds():
-        while order or queue:
-            while queue:
-                yield queue.popleft()
-            if order:
-                k = order.pop()
-                yield ys[k] + rng.uniform(-0.5, 0.5), xs[k] + rng.uniform(-0.5, 0.5)
-
-    for r0, c0 in seeds():
-        if not (0 <= r0 < h and 0 <= c0 < w):
-            continue
-        if not active[int(r0), int(c0)] or seed_block[int(r0), int(c0)]:
-            continue
-        pts = [(r0, c0)]
-        for sgn in (1, -1):
-            r, c = r0, c0
-            pr = pc = None
-            out = []
-            turned = 0.0
-            for _ in range(20000):
-                ri, ci = int(r), int(c)
-                dx, dy = ux[ri, ci], uy[ri, ci]
-                if pr is None:
-                    dx, dy = sgn * dx, sgn * dy
-                else:
-                    if dx * pc + dy * pr < 0:  # orientation, not direction
-                        dx, dy = -dx, -dy
-                    if dx * pc + dy * pr < 0.5:  # too sharp a turn
-                        break
-                    # Stop before circling a vortex: lines don't block
-                    # themselves, so a loop would ink one spot solid.
-                    turned += math.asin(max(-1.0, min(1.0, pc * dy - pr * dx)))
-                    if abs(turned) > 1.5 * math.pi:
-                        break
-                r2, c2 = r + dy * step, c + dx * step
-                ri, ci = int(r2), int(c2)
-                if not (0 <= ri < h and 0 <= ci < w) or not active[ri, ci] or stop_block[ri, ci]:
-                    break
-                out.append((r2, c2))
-                r, c, pr, pc = r2, c2, dy, dx
-            pts = out[::-1] + pts if sgn == -1 else pts + out
-        pts = np.array(pts)
-        if len(pts) * step_mm < min_len:
-            continue
-        ri = pts[:, 0].astype(int)
-        ci = pts[:, 1].astype(int)
-        local = sep[ri, ci]
-        for blk, frac in ((seed_block, 1.0), (stop_block, stop)):
-            radii = np.round(local * frac).astype(int)
-            for rad in np.unique(radii):
-                # Points are much closer than a disc is wide; stamping about
-                # every half-radius covers the same area for far less work.
-                every = max(1, int(rad / (2 * step)))
-                sel = (radii == rad) & (np.arange(len(radii)) % every == 0)
-                sel[-1] |= radii[-1] == rad
-                dy_, dx_ = _disk(int(rad))
-                rr = (ri[sel][:, None] + dy_[None]).ravel()
-                cc = (ci[sel][:, None] + dx_[None]).ravel()
-                ok = (rr >= 0) & (rr < h) & (cc >= 0) & (cc < w)
-                blk[rr[ok], cc[ok]] = True
-        lines.append(pts[:, ::-1].copy())
-        # Seeds just over one spacing out on both sides, every few points.
-        for j in range(0, len(pts), 4):
-            d = local[j] * 1.05
-            nr, nc = ux[ri[j], ci[j]], -uy[ri[j], ci[j]]
-            queue.append((pts[j, 0] + nr * d, pts[j, 1] + nc * d))
-            queue.append((pts[j, 0] - nr * d, pts[j, 1] - nc * d))
-    return lines
 
 
 # ----------------------------------------------------------------------
@@ -391,18 +296,24 @@ class MorelIllustrationSketch(vsketch.SketchClass):
         theta = 0.5 * np.arctan2(up(an["s2"]), up(an["c2"])) + np.float32(np.pi / 2)  # along the strokes
         ux, uy = np.cos(theta), np.sin(theta)  # (col, row)
         del theta
-        rng = np.random.default_rng(seed)
         args = dict(res=res, pen_w=self.pen_width, s_min=self.min_spacing, s_max=self.max_spacing,
                     stop=self.stop_distance, step_mm=self.step, min_len=self.min_length)
 
-        lines = []
-        for i in range(cov_src.shape[-1]):
-            c = up(cov_src[..., i]).clip(0, None)
-            a = math.radians(self.cross_angle + 30 * i)
-            flowing = streamlines(np.minimum(c, self.cross_at), ux, uy, rng, **args)
-            crossing = streamlines(np.maximum(c - self.cross_at, 0), np.full_like(ux, math.cos(a)),
-                                   np.full_like(uy, math.sin(a)), rng, **args)
-            lines.append(flowing + crossing)
+        # Two independent jobs per pen -- flowing lines, and straight lines
+        # crossing them -- run on threads (the kernel releases the GIL). Each
+        # gets its own seed so results don't depend on scheduling.
+        n_pens = cov_src.shape[-1]
+        with ThreadPoolExecutor(max_workers=2 * n_pens) as pool:
+            jobs = []
+            for i in range(n_pens):
+                c = up(cov_src[..., i]).clip(0, None)
+                a = math.radians(self.cross_angle + 30 * i)
+                jobs.append(pool.submit(flowlines.streamlines, np.minimum(c, self.cross_at), ux, uy,
+                                        seed * 16 + 2 * i, **args))
+                jobs.append(pool.submit(flowlines.streamlines, np.maximum(c - self.cross_at, 0), ux, uy,
+                                        seed * 16 + 2 * i + 1, const_dir=(math.cos(a), math.sin(a)), **args))
+            results = [j.result() for j in jobs]
+        lines = [results[2 * i] + results[2 * i + 1] for i in range(n_pens)]
 
         smooth = ndi.gaussian_filter(mask.astype(float), 1.5)
         # The silhouette only (the longest contour), not holes or stray specks.

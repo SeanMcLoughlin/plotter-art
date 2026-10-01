@@ -37,9 +37,11 @@ with a single subject on plain white or cream paper, at least ~1000 px tall.
 4. **Outline**: the silhouette, in `outline_pen`.
 
 Each stage is cached. Pen toggles redraw instantly, and hatching changes
-rerun only the line layout (about 7 s at the default `render_res`; raise it
-for quicker previews). Changing the image, analysis or tone settings reruns
-everything after that stage.
+rerun only the line layout, about 0.6 s. The line tracing (`flowlines.py`)
+is compiled with numba, and the eight line sets (flowing and crossing lines
+for each pen) run in parallel on threads. Changing the image, analysis or
+tone settings reruns everything after that stage, about 2 s. The very first
+run after editing `flowlines.py` takes a few extra seconds to compile.
 
 ## Main knobs
 

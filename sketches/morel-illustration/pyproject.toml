@@ -5,6 +5,7 @@ description = "Hatched pen-plotter rendering of a morel illustration, in four St
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "numba>=0.68.0",
     "numpy>=2.5.3",
     "pillow>=10",
     "pyside6<6.10",
