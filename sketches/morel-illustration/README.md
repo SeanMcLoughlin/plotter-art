@@ -3,8 +3,7 @@
 Turns a botanical illustration into a pen-and-ink drawing for a plotter, in
 four Stabilo Point 88 (0.4) pens. Lines follow the illustration's brush
 strokes, and each pen's line density follows how much of that pen's ink
-reproduces the illustration's colour. It's the image-driven successor to the
-procedural `sketches/morel`.
+reproduces the illustration's colour.
 
 ```sh
 uv run vsk run main.py      # tune tone, hatching and pens
